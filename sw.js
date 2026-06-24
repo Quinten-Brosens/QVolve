@@ -1,0 +1,21 @@
+const CACHE = 'qvolve-v1';
+const ASSETS = [
+  '/QVolve/qvolve.html',
+  '/QVolve/manifest.json',
+  '/QVolve/icon-192.png',
+  '/QVolve/icon-512.png',
+];
+
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(clients.claim());
+});
+
+self.addEventListener('fetch', e => {
+  e.respondWith(
+    caches.match(e.request).then(cached => cached || fetch(e.request))
+  );
+});
