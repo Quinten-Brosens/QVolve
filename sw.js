@@ -1,4 +1,4 @@
-const CACHE = 'qvolve-v2';
+const CACHE = 'qvolve-v3';
 const ASSETS = [
   '/QVolve/manifest.json',
   '/QVolve/icon-192.png',
@@ -19,8 +19,11 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  // HTML altijd vers ophalen (network-first), zodat updates meteen doorkomen
-  if (e.request.mode === 'navigate' || url.pathname.endsWith('.html')) {
+  // HTML én app-code altijd vers ophalen (network-first), zodat updates meteen doorkomen
+  if (e.request.mode === 'navigate'
+      || url.pathname.endsWith('.html')
+      || url.pathname.endsWith('.js')
+      || url.pathname.endsWith('.jsx')) {
     e.respondWith(
       fetch(e.request).catch(() => caches.match(e.request))
     );
