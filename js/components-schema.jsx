@@ -29,7 +29,11 @@ Meal prep: ${prefs.meal_prep||'deels'} · Extra: ${prefs.extra||'geen'}
 ## Instructies
 - 7 dagen, 6 maaltijden per dag: ontbijt, snack voormiddag, lunch, snack namiddag, diner, snack avond
 - Ingrediënten met exacte hoeveelheden (bv. "150g kipfilet", "200ml melk")
-- Dagelijkse totalen dicht bij macro-doelen (max ±5%)
+- BELANGRIJK — macro's: tel per maaltijd de kcal/eiwit/vet/koolhydraten op tot een dagtotaal,
+  en pas de hoeveelheden net zo lang aan tot elk dagtotaal binnen ±5% van de macro-doelen
+  hierboven valt (zowel calorieën als eiwit, vet én koolhydraten). Vul daarna het "totals"-veld
+  per dag in met die werkelijk berekende som — niet met de doelwaarden.
+- Reken nauwkeurig; een schema dat de macro's niet haalt is fout.
 - ALLEEN JSON terug, geen markdown
 
 {"days":[{"day":"Maandag","meals":[{"mealTime":"ontbijt","name":"...","ingredients":["80g havermout","200ml melk"],"tip":"...","kcal":0,"protein":0,"fat":0,"carbs":0}],"totals":{"kcal":0,"protein":0,"fat":0,"carbs":0}}],"shoppingList":[{"category":"Vlees & vis","items":["..."]}]}`;
@@ -92,7 +96,7 @@ function WeekSchemaPanel({macros,userSlug,onLoadDayToLog,onGoToVoeding}){
   async function genereerSchema(prefs){
     setGenerating(true);setGenError('');setFase('generating');
     try{
-      const text=await callGemini(buildSchemaPrompt(macros,prefs),16384);
+      const text=await callGemini(buildSchemaPrompt(macros,prefs),24000,8000);
       const clean=text.replace(/```json|```/g,'').trim();
       const start=clean.indexOf('{'),end=clean.lastIndexOf('}');
       const parsed=JSON.parse(start>=0&&end>start?clean.slice(start,end+1):clean);

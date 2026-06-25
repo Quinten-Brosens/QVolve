@@ -34,7 +34,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { prompt, maxTokens } = req.body || {};
+    const { prompt, maxTokens, thinkingBudget } = req.body || {};
     if (!prompt || typeof prompt !== 'string') {
       res.status(400).json({ error: 'Geen geldige prompt.' });
       return;
@@ -45,9 +45,10 @@ module.exports = async (req, res) => {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         maxOutputTokens: maxTokens || 1200,
-        // gemini-2.5-flash heeft "thinking" standaard aan; dat vreet output-tokens
-        // op waardoor lange antwoorden (bv. het weekschema) afgekapt/leeg terugkomen.
-        thinkingConfig: { thinkingBudget: 0 },
+        // "thinking" standaard uit (0) zodat korte antwoorden niet afgekapt raken.
+        // Voor reken-intensieve calls (weekschema) stuurt de client een budget mee,
+        // zodat de AI de dagmacro's correct kan uitrekenen.
+        thinkingConfig: { thinkingBudget: typeof thinkingBudget === 'number' ? thinkingBudget : 0 },
         // Alle calls verwachten JSON. JSON-modus garandeert syntactisch geldige
         // output (geen losse aanhalingstekens / afgebroken strings → geen parse-fouten).
         responseMimeType: 'application/json',

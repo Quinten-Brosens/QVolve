@@ -11,11 +11,11 @@ function lsDel(key) { try { localStorage.removeItem(key); } catch {} }
 
 // ─── Gemini API ─────────────────────────────────────────────────────────────
 // De sleutel zit server-side in de Vercel-functie /api/gemini, niet in de client.
-async function callGemini(prompt, maxTokens = 1200) {
+async function callGemini(prompt, maxTokens = 1200, thinkingBudget = 0) {
   const res = await fetch('/api/gemini', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, maxTokens })
+    body: JSON.stringify({ prompt, maxTokens, thinkingBudget })
   });
   let data;
   try { data = await res.json(); }
@@ -129,6 +129,7 @@ async function lookupOffBarcode(code) {
   const url = 'https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(code)
     + '.json?fields=code,product_name,product_name_nl,brands,nutriments';
   const res = await fetch(url);
+  if (res.status === 404) return null; // barcode niet in Open Food Facts → netjes "niet gevonden"
   if (!res.ok) throw new Error('Product opzoeken mislukt (' + res.status + ')');
   const data = await res.json();
   if (data.status !== 1 || !data.product) return null;

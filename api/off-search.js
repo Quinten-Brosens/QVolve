@@ -17,7 +17,7 @@ module.exports = async (req, res) => {
   try {
     const url = 'https://search.openfoodfacts.org/search'
       + '?q=' + encodeURIComponent(q)
-      + '&page_size=20&lang=nl&fields=' + encodeURIComponent(OFF_FIELDS);
+      + '&page_size=40&lang=nl&fields=' + encodeURIComponent(OFF_FIELDS);
     const r = await fetch(url, {
       headers: { 'User-Agent': 'Qvolve/1.0 (https://github.com/Quinten-Brosens/QVolve)' },
     });
