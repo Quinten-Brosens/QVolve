@@ -40,25 +40,32 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+    const body = JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        maxOutputTokens: maxTokens || 1200,
+        // gemini-2.5-flash heeft "thinking" standaard aan; dat vreet output-tokens
+        // op waardoor lange antwoorden (bv. het weekschema) afgekapt/leeg terugkomen.
+        thinkingConfig: { thinkingBudget: 0 },
+        // Alle calls verwachten JSON. JSON-modus garandeert syntactisch geldige
+        // output (geen losse aanhalingstekens / afgebroken strings → geen parse-fouten).
+        responseMimeType: 'application/json',
+      },
+    });
+
+    // Het flash-model raakt soms tijdelijk overbelast (503/429). Even opnieuw proberen
+    // met oplopende wachttijd, zodat die pieken de gebruiker niet bereiken.
+    let r;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            maxOutputTokens: maxTokens || 1200,
-            // gemini-2.5-flash heeft "thinking" standaard aan; dat vreet output-tokens
-            // op waardoor lange antwoorden (bv. het weekschema) afgekapt/leeg terugkomen.
-            thinkingConfig: { thinkingBudget: 0 },
-            // Alle calls verwachten JSON. JSON-modus garandeert syntactisch geldige
-            // output (geen losse aanhalingstekens / afgebroken strings → geen parse-fouten).
-            responseMimeType: 'application/json',
-          },
-        }),
-      }
-    );
+        body,
+      });
+      if (r.status !== 503 && r.status !== 429) break;
+      if (attempt < 3) await new Promise(done => setTimeout(done, 800 * (attempt + 1)));
+    }
 
     const data = await r.json();
     res.status(r.status).json(data);

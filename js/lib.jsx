@@ -31,11 +31,18 @@ async function callGemini(prompt, maxTokens = 1200) {
   return text;
 }
 
+// Snijdt het JSON-object robuust uit de AI-tekst (tegen losse tekst rond de JSON).
+function parseJsonFromAI(text) {
+  const clean = text.replace(/```json|```/g, '').trim();
+  const s = clean.indexOf('{'), e = clean.lastIndexOf('}');
+  return JSON.parse(s >= 0 && e > s ? clean.slice(s, e + 1) : clean);
+}
+
 async function estimateFoodWithAI(description) {
   const text = await callGemini(
     `Schat de voedingswaarden van: "${description}". Geef ALLEEN een JSON object terug, niets anders, geen markdown: {"name":"...","kcal":number,"protein":number,"fat":number,"carbs":number,"portionDescription":"..."}`
   );
-  return JSON.parse(text.replace(/```json|```/g,'').trim());
+  return parseJsonFromAI(text);
 }
 
 async function suggestMealWithAI(targets, mealLabel) {
@@ -45,9 +52,9 @@ async function suggestMealWithAI(targets, mealLabel) {
   if (targets.fat) parts.push(`${Math.round(targets.fat)}g vet`);
   if (targets.carbs) parts.push(`${Math.round(targets.carbs)}g koolhydraten`);
   const text = await callGemini(
-    `Stel een Belgische/Nederlandse maaltijd voor als ${mealLabel.toLowerCase()}, die voldoet aan: ${parts.join(', ')}. Geef ALLEEN JSON: {"title":"...","description":"...","kcal":number,"protein":number,"fat":number,"carbs":number}`
+    `Stel een Belgische/Nederlandse maaltijd voor als ${mealLabel.toLowerCase()}, die voldoet aan: ${parts.join(', ')}. Hou de description kort (max 1 zin). Geef ALLEEN JSON: {"title":"...","description":"...","kcal":number,"protein":number,"fat":number,"carbs":number}`
   );
-  return JSON.parse(text.replace(/```json|```/g,'').trim());
+  return parseJsonFromAI(text);
 }
 
 // ─── Open Food Facts (merkproducten + barcode) ──────────────────────────────
