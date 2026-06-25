@@ -54,11 +54,91 @@ function MealTimeSelector({active,onChange}){
   );
 }
 
+// ─── Barcode scanner (Open Food Facts) ───────────────────────────────────────
+const HTML5_QRCODE_SRC = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+
+function BarcodeScanner({ onDetected, onClose }) {
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const instRef = useRef(null);
+  const doneRef = useRef(false);
+  const runningRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function init() {
+      try {
+        await loadScript(HTML5_QRCODE_SRC);
+        if (cancelled) return;
+        const fmts = [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.CODE_128,
+        ];
+        const inst = new Html5Qrcode('qvolve-barcode-reader', { formatsToSupport: fmts, verbose: false });
+        instRef.current = inst;
+        await inst.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 240, height: 160 } },
+          (decoded) => {
+            if (doneRef.current) return;
+            doneRef.current = true;
+            onDetected(decoded);
+          },
+          () => {}
+        );
+        runningRef.current = true;
+        if (cancelled) { try { await inst.stop(); runningRef.current = false; } catch (e) {} return; }
+        setLoading(false);
+      } catch (e) {
+        if (!cancelled) { setError(humanizeCamError(e)); setLoading(false); }
+      }
+    }
+    init();
+    return () => {
+      cancelled = true;
+      const inst = instRef.current;
+      if (!inst) return;
+      // Enkel stoppen als de scanner echt liep — stop() gooit anders een (synchrone) fout
+      if (!runningRef.current) { try { inst.clear(); } catch (e) {} return; }
+      try {
+        const p = inst.stop();
+        if (p && p.then) p.then(() => { try { inst.clear(); } catch (e) {} }).catch(() => {});
+      } catch (e) {
+        try { inst.clear(); } catch (e2) {}
+      }
+    };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-sm">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-semibold text-white">Scan een barcode</span>
+          <button onClick={onClose} className="text-white/70 hover:text-white"><Icon name="X" size={20}/></button>
+        </div>
+        <div id="qvolve-barcode-reader" className="w-full rounded-2xl overflow-hidden bg-black min-h-[200px]" />
+        {loading && !error && <p className="text-xs text-white/70 mt-3 flex items-center gap-2"><Icon name="Loader2" size={13}/> Camera starten…</p>}
+        {error && <p className="text-xs text-red-300 bg-red-950/50 rounded-lg px-3 py-2 mt-3">{error}</p>}
+        {!error && <p className="text-[11px] text-white/50 mt-3 text-center">Richt op de streepjescode van het product.</p>}
+      </div>
+    </div>
+  );
+}
+
 // ─── AddFoodPanel ────────────────────────────────────────────────────────────
 function AddFoodPanel({pool,onAdd,onSaveCustom}){
   const [query,setQuery]=useState('');
   const [staged,setStaged]=useState([]);
   const [mode,setMode]=useState('search');
+  const [offResults,setOffResults]=useState([]);
+  const [offLoading,setOffLoading]=useState(false);
+  const [offError,setOffError]=useState('');
+  const [scanning,setScanning]=useState(false);
+  const [barcodeMsg,setBarcodeMsg]=useState('');
+  const [barcodeLoading,setBarcodeLoading]=useState(false);
   const [description,setDescription]=useState('');
   const [aiResult,setAiResult]=useState(null);
   const [aiLoading,setAiLoading]=useState(false);
@@ -74,13 +154,43 @@ function AddFoodPanel({pool,onAdd,onSaveCustom}){
     return pool.filter(f=>f.name.toLowerCase().includes(q)).sort((a,b)=>a.name.toLowerCase().indexOf(q)-b.name.toLowerCase().indexOf(q)).slice(0,12);
   },[pool,query]);
 
+  // Open Food Facts online doorzoeken (debounced, min. 3 tekens)
+  useEffect(()=>{
+    const q=query.trim();
+    if(q.length<3){setOffResults([]);setOffLoading(false);setOffError('');return;}
+    let active=true;
+    setOffLoading(true);setOffError('');
+    const t=setTimeout(async()=>{
+      try{const r=await searchOpenFoodFacts(q);if(active){setOffResults(r);setOffLoading(false);}}
+      catch(e){if(active){setOffResults([]);setOffError('Online zoeken lukte even niet.');setOffLoading(false);}}
+    },450);
+    return()=>{active=false;clearTimeout(t);};
+  },[query]);
+
+  async function handleBarcode(code){
+    setScanning(false);setBarcodeMsg('');setBarcodeLoading(true);
+    try{
+      const item=await lookupOffBarcode(code);
+      if(item){addToStaged(item);setMode('search');setBarcodeMsg(`✓ ${item.name} toegevoegd aan selectie — vul de grammen in.`);}
+      else setBarcodeMsg(`Barcode ${code} niet gevonden in Open Food Facts. Voeg het product handmatig toe via "Zelf ingeven".`);
+    }catch(e){setBarcodeMsg('Opzoeken mislukt: '+(e.message||''));}
+    setBarcodeLoading(false);
+  }
+
+  const renderRow=(item)=>(
+    <button key={item.id} onClick={()=>addToStaged(item)} className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm flex justify-between items-center gap-2">
+      <span className="text-gray-800 truncate">{item.name}</span>
+      <span className="text-xs text-gray-400 flex items-center gap-1 shrink-0">{Math.round(item.kcal)} kcal{item.perGram?'/100g':''} <Icon name="Plus" size={12}/></span>
+    </button>
+  );
+
   function addToStaged(item){setStaged(s=>[...s,{...item,stagedId:`s-${Date.now()}-${Math.random().toString(36).slice(2)}`,grams:item.perGram?100:null}]);setQuery('');}
   function updateGrams(id,g){setStaged(s=>s.map(it=>it.stagedId===id?{...it,grams:g}:it));}
   function removeStaged(id){setStaged(s=>s.filter(it=>it.stagedId!==id));}
 
   function confirmAll(){
     const entries=staged.map(item=>{
-      if(item.perGram){const g=parseFloat(item.grams)||0;return{id:`log-${Date.now()}-${Math.random()}`,name:item.name,grams:g,kcal:(item.kcal*g)/100,protein:(item.protein*g)/100,fat:(item.fat*g)/100,carbs:(item.carbs*g)/100,source:'nevo'};}
+      if(item.perGram){const g=parseFloat(item.grams)||0;return{id:`log-${Date.now()}-${Math.random()}`,name:item.name,grams:g,kcal:(item.kcal*g)/100,protein:(item.protein*g)/100,fat:(item.fat*g)/100,carbs:(item.carbs*g)/100,source:item.source||'nevo'};}
       return{id:`log-${Date.now()}-${Math.random()}`,name:item.name,grams:null,kcal:item.kcal,protein:item.protein,fat:item.fat,carbs:item.carbs,source:'custom',portionDescription:item.portionDescription};
     });
     onAdd(entries);setStaged([]);
@@ -114,6 +224,7 @@ function AddFoodPanel({pool,onAdd,onSaveCustom}){
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+      {scanning&&<BarcodeScanner onDetected={handleBarcode} onClose={()=>setScanning(false)} />}
       <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1">
         {[{id:'search',label:'Zoeken'},{id:'manual',label:'Zelf ingeven'},{id:'describe',label:'AI-schatting'}].map(t=>(
           <button key={t.id} onClick={()=>setMode(t.id)} className={`flex-1 py-1 rounded-md text-xs font-medium transition-colors ${mode===t.id?'bg-white shadow-sm text-gray-900':'text-gray-500'}`}>{t.label}</button>
@@ -122,18 +233,44 @@ function AddFoodPanel({pool,onAdd,onSaveCustom}){
 
       {mode==='search'&&(
         <div>
-          <div className="relative mb-3">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[15px]"><Icon name="Search" size={15}/></span>
-            <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Zoek voedingsmiddel..." className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+          <div className="flex gap-2 mb-3">
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[15px]"><Icon name="Search" size={15}/></span>
+              <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Zoek voedingsmiddel of merk..." className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+            </div>
+            <button onClick={()=>{setBarcodeMsg('');setScanning(true);}} title="Scan barcode"
+              className="shrink-0 flex items-center gap-1.5 px-3 rounded-lg bg-[#2f8bff] hover:bg-[#2076e8] text-white text-xs font-medium">
+              <Icon name="Camera" size={15}/> Scan
+            </button>
           </div>
-          {results.length>0&&(
-            <div className="border border-gray-100 rounded-lg divide-y divide-gray-50 max-h-56 overflow-y-auto mb-3">
-              {results.map(item=>(
-                <button key={item.id} onClick={()=>addToStaged(item)} className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm flex justify-between items-center">
-                  <span className="text-gray-800">{item.name}</span>
-                  <span className="text-xs text-gray-400 flex items-center gap-1">{Math.round(item.kcal)} kcal{item.perGram?'/100g':''} <Icon name="Plus" size={12}/></span>
-                </button>
-              ))}
+
+          {barcodeLoading&&<p className="text-xs text-gray-500 mb-2 flex items-center gap-1.5"><Icon name="Loader2" size={12}/> Barcode opzoeken…</p>}
+          {barcodeMsg&&<p className="text-xs mb-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-700">{barcodeMsg}</p>}
+
+          {query.trim()&&(
+            <div className="space-y-3 mb-3">
+              {results.length>0&&(
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 px-1 mb-1">NEVO &amp; eigen producten</p>
+                  <div className="border border-gray-100 rounded-lg divide-y divide-gray-50 max-h-52 overflow-y-auto">
+                    {results.map(renderRow)}
+                  </div>
+                </div>
+              )}
+              <div>
+                <p className="text-[11px] font-medium text-gray-400 px-1 mb-1 flex items-center gap-1.5">
+                  Merkproducten · Open Food Facts {offLoading&&<Icon name="Loader2" size={11}/>}
+                </p>
+                {offResults.length>0?(
+                  <div className="border border-gray-100 rounded-lg divide-y divide-gray-50 max-h-52 overflow-y-auto">
+                    {offResults.map(renderRow)}
+                  </div>
+                ):(
+                  query.trim().length<3
+                    ? <p className="text-xs text-gray-300 px-1">Typ minstens 3 tekens voor merkproducten…</p>
+                    : (!offLoading&&<p className="text-xs text-gray-300 px-1">{offError||'Geen merkproducten gevonden.'}</p>)
+                )}
+              </div>
             </div>
           )}
           {staged.length>0&&(
@@ -191,7 +328,7 @@ function AddFoodPanel({pool,onAdd,onSaveCustom}){
           <textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="Bv. 150g kipfilet met rijst en broccoli" rows={2}
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 mb-2 resize-none" />
           <button onClick={handleAiEstimate} disabled={aiLoading||!description.trim()}
-            className="bg-blue-900 hover:bg-blue-800 disabled:bg-gray-300 text-white rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5">
+            className="bg-[#2f8bff] hover:bg-[#2076e8] disabled:bg-gray-300 text-white rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5">
             {aiLoading?<Icon name="Loader2" size={13}/>:<Icon name="Sparkles" size={13}/>}{aiLoading?'Schatten...':'Schat macro\'s'}
           </button>
           {aiError&&<p className="text-xs text-red-600 mt-2">{aiError}</p>}
@@ -257,7 +394,7 @@ function MealSuggestionPanel({remaining,onAdd}){
         ))}
       </div>
       <button onClick={handleSuggest} disabled={loading}
-        className="flex items-center gap-1.5 bg-blue-900 hover:bg-blue-800 disabled:bg-gray-300 text-white rounded-lg px-3 py-1.5 text-xs font-medium">
+        className="flex items-center gap-1.5 bg-[#2f8bff] hover:bg-[#2076e8] disabled:bg-gray-300 text-white rounded-lg px-3 py-1.5 text-xs font-medium">
         {loading?<Icon name="Loader2" size={13}/>:<Icon name="Sparkles" size={13}/>}{loading?'Bezig...':'Genereer suggestie'}
       </button>
       {error&&<p className="text-xs text-red-600 mt-2">{error}</p>}

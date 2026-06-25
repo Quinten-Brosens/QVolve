@@ -3,7 +3,8 @@
 
 
 function App() {
-  const [userName, setUserName] = useState(null);
+  // Herstel een geldige sessie (max. 3 dagen oud) zodat je niet telkens opnieuw moet inloggen.
+  const [userName, setUserName] = useState(() => loadSession());
   const [tab, setTab] = useState('voeding');
   const [profile, setProfile] = useState(null);
   const [macros, setMacros] = useState(null);
@@ -11,10 +12,19 @@ function App() {
   const [log, setLog] = useState([]);
   const [dateStr, setDateStr] = useState(toDateStr(new Date()));
   const [activeMeal, setActiveMeal] = useState(MEAL_TIMES[0].key);
-  const [showSettings, setShowSettings] = useState(false);
   const [customFoods, setCustomFoods] = useState([]);
 
   const userSlug = userName ? slugifyName(userName) : '';
+
+  // Bij opstarten: vraag persistente opslag aan en ververs de sessie (sliding window van 3 dagen).
+  useEffect(() => {
+    requestPersistentStorage();
+    if (userName) saveSession(userName);
+  }, []);
+
+  // Inloggen / uitloggen — houdt de sessie in localStorage in sync.
+  function handleUnlock(name) { saveSession(name); setUserName(name); }
+  function handleLogout() { clearSession(); setUserName(null); }
 
   // Profiel laden
   useEffect(() => {
@@ -102,21 +112,16 @@ function App() {
     carbs: Math.max(macros.carbsG - totals.carbs, 0),
   } : null;
 
-  if (!userName) return <AccessGate onUnlock={setUserName} />;
+  if (!userName) return <AccessGate onUnlock={handleUnlock} />;
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
-
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-blue-900 border-b border-blue-800 shadow-sm">
+      <header className="sticky top-0 z-40 bg-[#182a48] border-b border-[#2b3e60] shadow-sm">
         <div className="flex items-center justify-between px-4 h-14 max-w-2xl mx-auto">
-          <span className="text-lg font-bold text-white">Q<span className="text-orange-400">volve</span></span>
+          <span className="font-logo text-2xl font-bold tracking-tight"><span className="text-[#2f8bff]">Q</span><span className="text-orange-500">volve</span></span>
           <div className="flex items-center gap-3">
-            <button onClick={() => setShowSettings(true)} className="text-blue-300 hover:text-white p-1.5 rounded-lg hover:bg-blue-800 transition-colors" title="Gemini API-sleutel instellen">
-              <Icon name="Settings" size={18}/>
-            </button>
-            <button onClick={() => setUserName(null)} className="text-[11px] text-blue-300 hover:text-white underline">{userName}</button>
+            <button onClick={handleLogout} className="text-[11px] text-blue-300 hover:text-white underline" title="Uitloggen">{userName}</button>
           </div>
         </div>
       </header>
@@ -190,18 +195,18 @@ function App() {
       </main>
 
       {/* Bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-blue-900 border-t border-blue-800 shadow-lg">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#182a48] border-t border-[#2b3e60] shadow-lg">
         <div className="max-w-2xl mx-auto flex">
           {[{id:'voeding',label:'Voeding',icon:'UtensilsCrossed'},{id:'weekschema',label:'Weekplan',icon:'Calendar'},{id:'training',label:'Training',icon:'Dumbbell'}].map(({id,label,icon})=>(
             <button key={id} onClick={()=>setTab(id)}
               className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-3 transition-colors ${tab===id?'text-orange-400':'text-blue-300 active:text-blue-100'}`}>
               <Icon name={icon} size={22}/>
-              <span className={`text-[10px] font-medium ${tab===id?'text-orange-400':'text-blue-300'}`}>{label}</span>
+              <span className={`font-logo text-[10px] font-semibold uppercase tracking-wide ${tab===id?'text-orange-400':'text-blue-300'}`}>{label}</span>
               {tab===id&&<span className="w-4 h-0.5 bg-orange-400 rounded-full"/>}
             </button>
           ))}
         </div>
-        <div style={{height:'env(safe-area-inset-bottom,0px)'}} className="bg-blue-900"/>
+        <div style={{height:'env(safe-area-inset-bottom,0px)'}} className="bg-[#182a48]"/>
       </nav>
     </div>
   );

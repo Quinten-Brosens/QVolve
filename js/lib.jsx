@@ -10,23 +10,17 @@ function lsSet(key, value) {
 function lsDel(key) { try { localStorage.removeItem(key); } catch {} }
 
 // ─── Gemini API ─────────────────────────────────────────────────────────────
-const GEMINI_MODEL = 'gemini-2.5-flash';
+// De sleutel zit server-side in de Vercel-functie /api/gemini, niet in de client.
 async function callGemini(prompt, maxTokens = 1200) {
-  const apiKey = lsGet('qvolve-gemini-key');
-  if (!apiKey) throw new Error('Geen API-sleutel ingesteld.');
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: maxTokens }
-      })
-    }
-  );
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
+  const res = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, maxTokens })
+  });
+  let data;
+  try { data = await res.json(); }
+  catch { throw new Error('Geen geldig antwoord van de AI-server (HTTP ' + res.status + ').'); }
+  if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error.message);
   if (!data.candidates || !data.candidates[0]) throw new Error('Geen antwoord van AI ontvangen.');
   return data.candidates[0].content.parts[0].text;
 }
@@ -48,6 +42,106 @@ async function suggestMealWithAI(targets, mealLabel) {
     `Stel een Belgische/Nederlandse maaltijd voor als ${mealLabel.toLowerCase()}, die voldoet aan: ${parts.join(', ')}. Geef ALLEEN JSON: {"title":"...","description":"...","kcal":number,"protein":number,"fat":number,"carbs":number}`
   );
   return JSON.parse(text.replace(/```json|```/g,'').trim());
+}
+
+// ─── Open Food Facts (merkproducten + barcode) ──────────────────────────────
+// Publieke read-API: geen sleutel, geen login, CORS toegestaan → rechtstreeks
+// vanuit de browser. Resultaten worden gemapt op hetzelfde formaat als NEVO
+// (waarden per 100g, perGram:true) zodat ze door dezelfde flow lopen.
+function mapOffProduct(p) {
+  if (!p) return null;
+  const n = p.nutriments || {};
+  const kcal = n['energy-kcal_100g'];
+  const protein = n.proteins_100g;
+  if (kcal == null || protein == null) return null; // onvolledige macro's overslaan
+  let name = (p.product_name_nl || p.product_name || '').trim();
+  if (!name) return null;
+  // brands is een array (zoekdienst) of komma-string (barcode-endpoint)
+  let brand = Array.isArray(p.brands) ? (p.brands[0] || '') : (p.brands ? String(p.brands).split(',')[0] : '');
+  brand = brand.trim();
+  if (brand) name = `${name} — ${brand}`;
+  const round1 = v => Math.round((Number(v) || 0) * 10) / 10;
+  return {
+    id: 'off-' + p.code,
+    name,
+    group: 'Open Food Facts',
+    kcal: round1(kcal),
+    protein: round1(protein),
+    fat: round1(n.fat_100g),
+    carbs: round1(n.carbohydrates_100g),
+    fiber: round1(n.fiber_100g),
+    perGram: true,
+    source: 'off',
+  };
+}
+
+// Lijst van OFF-producten → app-formaat, met ontdubbeling op naam.
+function offListToFoods(list) {
+  const seen = new Set();
+  const out = [];
+  for (const p of (list || [])) {
+    const m = mapOffProduct(p);
+    if (!m) continue;
+    const key = m.name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(m);
+  }
+  return out;
+}
+
+async function searchOpenFoodFacts(query) {
+  // 1) Voorkeur: eigen Vercel-proxy → betrouwbare zoekdienst (Search-a-licious), geen CORS-probleem
+  try {
+    const res = await fetch('/api/off-search?q=' + encodeURIComponent(query));
+    if (res.ok) {
+      const data = await res.json();
+      const list = data.hits || data.products; // zoekdienst geeft 'hits'
+      if (Array.isArray(list)) return offListToFoods(list);
+    }
+  } catch (e) { /* proxy niet bereikbaar (bv. lokale dev) → fallback hieronder */ }
+
+  // 2) Fallback: legacy CORS-endpoint, rechtstreeks. Kan tijdelijk overbelast zijn (503).
+  const url = 'https://world.openfoodfacts.org/cgi/search.pl'
+    + '?search_terms=' + encodeURIComponent(query)
+    + '&search_simple=1&action=process&json=1&page_size=20&lc=nl'
+    + '&fields=code,product_name,product_name_nl,brands,nutriments';
+  const res2 = await fetch(url);
+  if (!res2.ok) throw new Error('OFF-zoeken mislukt (' + res2.status + ')');
+  const data2 = await res2.json();
+  return offListToFoods(data2.products || []);
+}
+
+async function lookupOffBarcode(code) {
+  const url = 'https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(code)
+    + '.json?fields=code,product_name,product_name_nl,brands,nutriments';
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Product opzoeken mislukt (' + res.status + ')');
+  const data = await res.json();
+  if (data.status !== 1 || !data.product) return null;
+  return mapOffProduct(data.product);
+}
+
+// ─── Hulpfuncties: extern script lazy laden + camerafouten vertalen ─────────
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector('script[data-src="' + src + '"]')) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src;
+    s.dataset.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Kon de bibliotheek niet laden.'));
+    document.head.appendChild(s);
+  });
+}
+
+function humanizeCamError(e) {
+  const msg = (e && e.message) || String(e);
+  if (/NotAllowed|Permission|denied/i.test(msg)) return 'Cameratoegang geweigerd. Sta de camera toe en probeer opnieuw.';
+  if (/NotFound|Requested device|no camera/i.test(msg)) return 'Geen camera gevonden op dit toestel.';
+  if (/secure|https/i.test(msg)) return 'De camera werkt enkel via https (of localhost).';
+  if (/NotReadable|in use/i.test(msg)) return 'De camera is in gebruik door een andere app.';
+  return 'Kon de camera niet starten: ' + msg;
 }
 
 // ─── Gebruikersbeheer ───────────────────────────────────────────────────────
@@ -83,6 +177,32 @@ function loadUsers() {
 }
 function saveUsers(users) { lsSet(USERS_KEY, users); }
 
+// ─── Sessie (ingelogd blijven) ──────────────────────────────────────────────
+const SESSION_KEY        = "qvolve-session";
+const SESSION_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000; // 3 dagen
+
+// Geeft de naam van de geldige sessie terug, of null. Wist verlopen/ongeldige sessies.
+function loadSession() {
+  const s = lsGet(SESSION_KEY);
+  if (!s || !s.name || !s.ts) return null;
+  if (Date.now() - s.ts > SESSION_MAX_AGE_MS) { lsDel(SESSION_KEY); return null; }
+  // Gebruiker moet nog bestaan en geen verplichte wachtwoordwijziging hebben
+  const u = loadUsers().find(u => u.name === s.name && !u.mustChangePw);
+  if (!u) { lsDel(SESSION_KEY); return null; }
+  return s.name;
+}
+function saveSession(name) { lsSet(SESSION_KEY, { name, ts: Date.now() }); }
+function clearSession() { lsDel(SESSION_KEY); }
+
+// Vraag de browser om opslag niet zomaar te wissen (vermindert kans op dataverlies).
+function requestPersistentStorage() {
+  try {
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persisted().then(p => { if (!p) navigator.storage.persist(); });
+    }
+  } catch {}
+}
+
 // ─── Inline SVG icons ───────────────────────────────────────────────────────
 const icons = {
   Search:       <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
@@ -103,6 +223,7 @@ const icons = {
   CheckCircle2: <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>,
   Circle:       <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/></svg>,
   Key:          <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2l-9.6 9.6"/><path d="M15.5 7.5l3 3L22 7l-3-3"/></svg>,
+  Camera:       <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>,
 };
 
 function Icon({ name, size = 16, className = '' }) {

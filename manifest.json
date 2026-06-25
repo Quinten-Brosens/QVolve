@@ -2,11 +2,11 @@
   "name": "Qvolve",
   "short_name": "Qvolve",
   "description": "Train. Fuel. Recover. Evolve.",
-  "start_url": "/QVolve/qvolve.html",
-  "scope": "/QVolve/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#1e3a8a",
+  "background_color": "#14223c",
+  "theme_color": "#182a48",
   "orientation": "portrait",
   "icons": [
     {

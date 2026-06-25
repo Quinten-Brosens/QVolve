@@ -1,8 +1,8 @@
-const CACHE = 'qvolve-v3';
+const CACHE = 'qvolve-v5';
 const ASSETS = [
-  '/QVolve/manifest.json',
-  '/QVolve/icon-192.png',
-  '/QVolve/icon-512.png',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
 ];
 
 self.addEventListener('install', e => {
