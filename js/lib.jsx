@@ -334,7 +334,12 @@ function applyKcalToMacros(macros, newKcal) {
   const carbsG = Math.round(Math.max(targetKcal-proteinG*4-fatG*9,0)/4);
   return { ...macros, targetKcal, proteinG, fatG, carbsG, ratios: r };
 }
-function toDateStr(d) { return d.toISOString().slice(0,10); }
+function toDateStr(d) {
+  // Lokale datum (niet toISOString → dat rekent naar UTC en schuift in tijdzones
+  // vóór UTC een dag op, waardoor datumnavigatie scheef loopt).
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 function addDays(dateStr, n) { const d=new Date(dateStr+'T00:00:00'); d.setDate(d.getDate()+n); return toDateStr(d); }
 function formatDateNice(dateStr) { return new Date(dateStr+'T00:00:00').toLocaleDateString('nl-BE',{weekday:'long',day:'numeric',month:'long'}); }
 function groupByMeal(log) {

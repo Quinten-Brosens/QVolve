@@ -82,7 +82,7 @@ function WeekSchemaPanel({macros,userSlug,onLoadDayToLog,onGoToVoeding}){
   const [loadedDays,setLoadedDays]=useState(new Set());
 
   function getDagDatum(i){
-    const base=new Date();const d=base.getDay();base.setDate(base.getDate()-(d===0?6:d-1));base.setDate(base.getDate()+i);return base.toISOString().slice(0,10);
+    const base=new Date();const d=base.getDay();base.setDate(base.getDate()-(d===0?6:d-1));base.setDate(base.getDate()+i);return toDateStr(base);
   }
 
   useEffect(()=>{
