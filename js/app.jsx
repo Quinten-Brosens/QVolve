@@ -13,6 +13,7 @@ function App() {
   const [dateStr, setDateStr] = useState(toDateStr(new Date()));
   const [activeMeal, setActiveMeal] = useState(MEAL_TIMES[0].key);
   const [customFoods, setCustomFoods] = useState([]);
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
   const userSlug = userName ? slugifyName(userName) : '';
 
@@ -116,6 +117,8 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {showBreakdown && macros && <MacroBreakdownModal log={log} macros={macros} totals={totals} onClose={() => setShowBreakdown(false)} />}
+
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[#182a48] border-b border-[#2b3e60] shadow-sm">
         <div className="flex items-center justify-between px-4 h-14 max-w-2xl mx-auto">
@@ -141,19 +144,24 @@ function App() {
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-sm font-semibold text-gray-900">Dagtotaal</h2>
-                    <button onClick={() => setEditingProfile(true)} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 py-1.5 px-2 rounded-lg hover:bg-gray-50">
-                      <Icon name="Settings" size={13}/> Profiel
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => setShowBreakdown(true)} className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-50" title="Macroverdeling">
+                        <Icon name="PieChart" size={15}/>
+                      </button>
+                      <button onClick={() => setEditingProfile(true)} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 py-1.5 px-2 rounded-lg hover:bg-gray-50">
+                        <Icon name="Settings" size={13}/> Profiel
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center justify-between mb-3 bg-gray-50 rounded-xl px-3 py-2">
                     <span className="text-xs text-gray-500">Caloriedoel</span>
                     <KcalAdjuster targetKcal={macros.targetKcal} onAdjust={handleAdjustKcal} onReset={handleResetMacros}/>
                   </div>
-                  <div className="space-y-2.5">
-                    <MacroBar label="Calorieën" consumed={totals.kcal} target={macros.targetKcal} unit="kcal" color="bg-orange-500"/>
-                    <MacroBar label="Eiwit" consumed={totals.protein} target={macros.proteinG} unit="g" color="bg-blue-500"/>
-                    <MacroBar label="Vet" consumed={totals.fat} target={macros.fatG} unit="g" color="bg-amber-500"/>
-                    <MacroBar label="Koolhydraten" consumed={totals.carbs} target={macros.carbsG} unit="g" color="bg-purple-500"/>
+                  <CalorieSummary consumed={totals.kcal} target={macros.targetKcal}/>
+                  <div className="grid grid-cols-3 gap-2 mt-4">
+                    <MacroRing label="Koolhydraten" consumed={totals.carbs} target={macros.carbsG} color="#1e3a8a"/>
+                    <MacroRing label="Eiwit" consumed={totals.protein} target={macros.proteinG} color="#2f8bff"/>
+                    <MacroRing label="Vet" consumed={totals.fat} target={macros.fatG} color="#f59e0b"/>
                   </div>
                   <p className="text-[10px] text-gray-400 pt-2">BMR {macros.bmr} · TDEE {macros.tdee} kcal · {(MACRO_PROFILES[profile.macroProfile]||MACRO_PROFILES.normal).label}</p>
                 </div>
