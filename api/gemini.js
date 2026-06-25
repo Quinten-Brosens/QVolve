@@ -47,7 +47,12 @@ module.exports = async (req, res) => {
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: maxTokens || 1200 },
+          generationConfig: {
+            maxOutputTokens: maxTokens || 1200,
+            // gemini-2.5-flash heeft "thinking" standaard aan; dat vreet output-tokens
+            // op waardoor lange antwoorden (bv. het weekschema) afgekapt/leeg terugkomen.
+            thinkingConfig: { thinkingBudget: 0 },
+          },
         }),
       }
     );

@@ -92,9 +92,10 @@ function WeekSchemaPanel({macros,userSlug,onLoadDayToLog,onGoToVoeding}){
   async function genereerSchema(prefs){
     setGenerating(true);setGenError('');setFase('generating');
     try{
-      const text=await callGemini(buildSchemaPrompt(macros,prefs),8192);
+      const text=await callGemini(buildSchemaPrompt(macros,prefs),16384);
       const clean=text.replace(/```json|```/g,'').trim();
-      const parsed=JSON.parse(clean);
+      const start=clean.indexOf('{'),end=clean.lastIndexOf('}');
+      const parsed=JSON.parse(start>=0&&end>start?clean.slice(start,end+1):clean);
       if(!parsed.days||!Array.isArray(parsed.days))throw new Error('Ongeldig schema-formaat.');
       setPlan(parsed);setFase('plan');lsSet(`weekschema-plan:${userSlug}`,parsed);
     }catch(e){setGenError(e.message||'Fout bij genereren.');setFase('vragenlijst');setStapIndex(VRAGENLIJST.length-1);}

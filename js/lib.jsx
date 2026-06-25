@@ -21,8 +21,14 @@ async function callGemini(prompt, maxTokens = 1200) {
   try { data = await res.json(); }
   catch { throw new Error('Geen geldig antwoord van de AI-server (HTTP ' + res.status + ').'); }
   if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error.message);
-  if (!data.candidates || !data.candidates[0]) throw new Error('Geen antwoord van AI ontvangen.');
-  return data.candidates[0].content.parts[0].text;
+  const cand = data.candidates && data.candidates[0];
+  if (!cand) throw new Error('Geen antwoord van AI ontvangen.');
+  const text = cand.content && cand.content.parts && cand.content.parts[0] && cand.content.parts[0].text;
+  if (!text) {
+    if (cand.finishReason === 'MAX_TOKENS') throw new Error('Antwoord te lang voor de limiet. Probeer opnieuw.');
+    throw new Error('Leeg antwoord van AI.');
+  }
+  return text;
 }
 
 async function estimateFoodWithAI(description) {
