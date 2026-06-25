@@ -55,17 +55,18 @@ module.exports = async (req, res) => {
       },
     });
 
-    // Het flash-model raakt soms tijdelijk overbelast (503/429). Even opnieuw proberen
-    // met oplopende wachttijd, zodat die pieken de gebruiker niet bereiken.
+    // Het flash-model raakt soms tijdelijk overbelast (503). Dan even opnieuw proberen.
+    // NIET herhalen bij 429 (quota overschreden): retries verbruiken dan alleen méér
+    // quota; die fout geven we meteen door zodat de gebruiker even kan wachten.
     let r;
-    for (let attempt = 0; attempt < 4; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
         body,
       });
-      if (r.status !== 503 && r.status !== 429) break;
-      if (attempt < 3) await new Promise(done => setTimeout(done, 800 * (attempt + 1)));
+      if (r.status !== 503) break;
+      if (attempt < 2) await new Promise(done => setTimeout(done, 800 * (attempt + 1)));
     }
 
     const data = await r.json();
