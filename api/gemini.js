@@ -52,6 +52,9 @@ module.exports = async (req, res) => {
             // gemini-2.5-flash heeft "thinking" standaard aan; dat vreet output-tokens
             // op waardoor lange antwoorden (bv. het weekschema) afgekapt/leeg terugkomen.
             thinkingConfig: { thinkingBudget: 0 },
+            // Alle calls verwachten JSON. JSON-modus garandeert syntactisch geldige
+            // output (geen losse aanhalingstekens / afgebroken strings → geen parse-fouten).
+            responseMimeType: 'application/json',
           },
         }),
       }
