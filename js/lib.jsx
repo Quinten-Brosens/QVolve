@@ -68,7 +68,8 @@ async function suggestMealWithAI(targets, mealLabel) {
   if (targets.fat) parts.push(`${Math.round(targets.fat)}g vet`);
   if (targets.carbs) parts.push(`${Math.round(targets.carbs)}g koolhydraten`);
   const text = await callGemini(
-    `Stel een Belgische/Nederlandse maaltijd voor als ${mealLabel.toLowerCase()}, die voldoet aan: ${parts.join(', ')}. Hou de description kort (max 1 zin). Geef ALLEEN JSON: {"title":"...","description":"...","kcal":number,"protein":number,"fat":number,"carbs":number}`
+    `Stel een Belgische/Nederlandse maaltijd voor als ${mealLabel.toLowerCase()}, die voldoet aan: ${parts.join(', ')}. Geef de ingrediënten met exacte hoeveelheden (bv. "150g kipfilet", "60g havermout"), een korte bereidingstip (1 zin), en zorg dat de macro's overeenkomen met die ingrediënten. Geef ALLEEN JSON: {"title":"...","ingredients":["150g kipfilet","100g rijst gekookt"],"description":"...","kcal":number,"protein":number,"fat":number,"carbs":number}`,
+    3000, 1500
   );
   return parseJsonFromAI(text);
 }

@@ -374,7 +374,7 @@ function MealSuggestionPanel({remaining,onAdd}){
   }
 
   function addSuggestion(){
-    onAdd([{id:`log-${Date.now()}-${Math.random()}`,name:suggestion.title,grams:null,kcal:suggestion.kcal,protein:suggestion.protein,fat:suggestion.fat,carbs:suggestion.carbs,source:'ai',portionDescription:suggestion.description}],mealTime);
+    onAdd([{id:`log-${Date.now()}-${Math.random()}`,name:suggestion.title,grams:null,kcal:suggestion.kcal,protein:suggestion.protein,fat:suggestion.fat,carbs:suggestion.carbs,source:'ai',portionDescription:[(suggestion.ingredients||[]).join(', '),suggestion.description].filter(Boolean).join(' — ')}],mealTime);
     setSuggestion(null);
   }
 
@@ -401,8 +401,18 @@ function MealSuggestionPanel({remaining,onAdd}){
       {suggestion&&(
         <div className="border border-orange-100 bg-orange-50 rounded-lg p-3 mt-3">
           <p className="text-sm font-medium text-gray-800 mb-1">{suggestion.title}</p>
-          <p className="text-xs text-gray-500 mb-2">{suggestion.description}</p>
-          <p className="text-xs text-gray-600 mb-3">{Math.round(suggestion.kcal)} kcal · {Math.round(suggestion.protein)}g eiwit · {Math.round(suggestion.fat)}g vet · {Math.round(suggestion.carbs)}g KH</p>
+          {Array.isArray(suggestion.ingredients)&&suggestion.ingredients.length>0&&(
+            <ul className="text-xs text-gray-600 mb-2 list-disc list-inside space-y-0.5">
+              {suggestion.ingredients.map((ing,i)=><li key={i}>{ing}</li>)}
+            </ul>
+          )}
+          {suggestion.description&&<p className="text-xs text-gray-500 mb-2 italic">{suggestion.description}</p>}
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium mb-3">
+            <span className="text-orange-600">{Math.round(suggestion.kcal)} kcal</span>
+            <span className="text-blue-600">{Math.round(suggestion.protein)}g eiwit</span>
+            <span className="text-amber-600">{Math.round(suggestion.fat)}g vet</span>
+            <span className="text-purple-600">{Math.round(suggestion.carbs)}g KH</span>
+          </div>
           <button onClick={addSuggestion} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-1.5 text-xs font-medium">
             Toevoegen aan {MEAL_TIMES.find(m=>m.key===mealTime)?.label.toLowerCase()||'logboek'}
           </button>
