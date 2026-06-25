@@ -20,7 +20,23 @@ async function callGemini(prompt, maxTokens = 1200, thinkingBudget = 0) {
   let data;
   try { data = await res.json(); }
   catch { throw new Error('Geen geldig antwoord van de AI-server (HTTP ' + res.status + ').'); }
-  if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error.message);
+  if (data.error) {
+    const err = data.error;
+    const code = err && err.code;
+    const status = (err && err.status) || '';
+    const raw = typeof err === 'string' ? err : ((err && err.message) || '');
+    if (code === 429 || status === 'RESOURCE_EXHAUSTED' || /quota|rate limit/i.test(raw)) {
+      const m = raw.match(/retry in ([\d.]+)s/i);
+      const secs = m ? Math.ceil(parseFloat(m[1])) : null;
+      throw new Error(secs
+        ? `Even rustig aan — de AI-limiet is bereikt. Probeer over ${secs} seconden opnieuw.`
+        : 'Even rustig aan — de AI-limiet is bereikt. Probeer over een minuutje opnieuw.');
+    }
+    if (code === 503 || status === 'UNAVAILABLE' || /overload|high demand|unavailable/i.test(raw)) {
+      throw new Error('De AI is momenteel erg druk. Probeer het zo dadelijk opnieuw.');
+    }
+    throw new Error(raw || 'Er ging iets mis met de AI.');
+  }
   const cand = data.candidates && data.candidates[0];
   if (!cand) throw new Error('Geen antwoord van AI ontvangen.');
   const text = cand.content && cand.content.parts && cand.content.parts[0] && cand.content.parts[0].text;
