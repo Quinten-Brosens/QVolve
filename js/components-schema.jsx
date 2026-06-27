@@ -80,10 +80,10 @@ function WeekSchemaPanel({macros,userSlug,onLoadDayToLog,onGoToVoeding}){
   const [selectedDay,setSelectedDay]=useState(0);
   const [showShopping,setShowShopping]=useState(false);
   const [loadedDays,setLoadedDays]=useState(new Set());
+  const [startDate,setStartDate]=useState(toDateStr(new Date()));
 
-  function getDagDatum(i){
-    const base=new Date();const d=base.getDay();base.setDate(base.getDate()-(d===0?6:d-1));base.setDate(base.getDate()+i);return toDateStr(base);
-  }
+  // Dag i van het schema komt op startDate + i dagen.
+  function getDagDatum(i){ return addDays(startDate, i); }
 
   useEffect(()=>{
     const prefs=lsGet(`weekschema-prefs:${userSlug}`);
@@ -167,6 +167,11 @@ function WeekSchemaPanel({macros,userSlug,onLoadDayToLog,onGoToVoeding}){
               </button>
             ))}
           </div>
+          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+            <label className="text-xs text-gray-500">Schema start op:</label>
+            <input type="date" value={startDate} onChange={e=>{setStartDate(e.target.value);setLoadedDays(new Set());}}
+              className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"/>
+          </div>
         </div>
 
         {showShopping&&plan.shoppingList&&(
@@ -184,7 +189,7 @@ function WeekSchemaPanel({macros,userSlug,onLoadDayToLog,onGoToVoeding}){
         {!showShopping&&dag&&(
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-900">{dag.day}</h3>
+              <h3 className="text-sm font-semibold text-gray-900 capitalize">{dag.day} <span className="text-xs font-normal text-gray-400">· {formatDateNice(getDagDatum(selectedDay))}</span></h3>
               {!loadedDays.has(selectedDay)&&(
                 <button onClick={()=>{onLoadDayToLog(dag,getDagDatum(selectedDay));setLoadedDays(s=>new Set([...s,selectedDay]));onGoToVoeding();}}
                   className="text-xs text-white bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-lg font-medium transition-colors">
