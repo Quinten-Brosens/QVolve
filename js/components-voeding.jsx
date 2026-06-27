@@ -182,9 +182,32 @@ function shouldDropIngredient(name){
   if(name.startsWith('kruiden')||name.startsWith('specerij')) return true;
   return DROP_CONTAINS.some(x=>name.includes(x));
 }
+// Reduceer naar stam voor betere keyword-matching:
+// "cherrytomaten" → "tomaten" → "tomaat"
+// "aardappelen" → "aardappel"
+function stemNL(n){
+  // strip bekende voorvoegsels (cherry, cocktail, mini, …)
+  n=n.replace(/^(cherry|cocktail|mini|baby|wilde?)\s*/,'');
+  // strip meervouds-/verkleinuitgangen (volgorde belangrijk: langste eerst)
+  if(n.endsWith('tjes')) n=n.slice(0,-4);        // tomaatjes → tomaat
+  else if(n.endsWith('tje')) n=n.slice(0,-3);
+  else if(n.endsWith('jes')) n=n.slice(0,-3);    // spruiTjes → spruit
+  else if(n.endsWith('je')) n=n.slice(0,-2);
+  else if(n.endsWith('en')){
+    // tomaten → tomaat (aa-herstel), appelen → appel
+    const z=n.slice(0,-2);
+    if(z.endsWith('at')) n=z.slice(0,-2)+'aat';  // tomaten → tomaat
+    else if(z.endsWith('ol')) n=z.slice(0,-2)+'ool'; // broccolen (edge) → broccool
+    else n=z;
+  } else if(n.endsWith('s') && n.length>4) n=n.slice(0,-1); // appels → appel
+  return n.trim();
+}
 function categorizeIngredient(name){
+  const stem=stemNL(name);
   for(const [cat,words] of SHOP_KEYWORDS){
-    for(const w of words){ if(name===w||name.includes(w)) return cat; }
+    for(const w of words){
+      if(name===w||name.includes(w)||stem===w||stem.includes(w)||w.includes(stem)) return cat;
+    }
   }
   return 'Overig';
 }
@@ -219,10 +242,13 @@ function parseIngredient(raw){
 
 function labelFor(name,unit,qty){
   const cap=name.charAt(0).toUpperCase()+name.slice(1);
-  const q=Math.round(qty*10)/10;
-  if(unit==='st') return q>1?`${cap} ×${q}`:cap;
-  if(unit==='el'||unit==='tl') return `${cap} — ${q} ${unit}`;
-  return `${cap} — ${q} ${unit}`;   // g of ml
+  let q=qty, u=unit;
+  if(unit==='g' && qty>=1000){ q=Math.round(qty/100)/10; u='kg'; }
+  else if(unit==='ml' && qty>=1000){ q=Math.round(qty/100)/10; u='l'; }
+  else { q=Math.round(qty*10)/10; }
+  const qs=Number.isInteger(q)?String(q):String(q).replace('.',',');
+  if(u==='st') return qty>1?`${cap} ×${Math.round(qty)}`:cap;
+  return `${cap} — ${qs} ${u}`;
 }
 
 // De boodschappenlijst toont de INGREDIËNTEN (niet de gerechten): gelogde
