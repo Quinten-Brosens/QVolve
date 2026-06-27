@@ -106,7 +106,8 @@ blauw + oranje accenten.
 - **Plannen (Voeding-tab):** knoppen bij de datumnavigatie. "Boodschappenlijst"
   aggregeert de gelogde voeding over een datumbereik (van/tot, grammen opgeteld per
   product, gegroepeerd per voedingsgroep, met kopieerknop). "Dag herhalen" kopieert
-  de huidige dag naar dezelfde weekdag voor X komende weken (overschrijft die dagen).
+  de huidige dag naar gekozen weekdagen (aanvinkbaar Ma–Zo) voor X komende weken
+  (overschrijft die dagen).
 - **Open Food Facts (merkproducten + barcode):** gefedereerd zoeken — NEVO/eigen
   producten lokaal en instant, OFF-merkproducten online erbovenop (debounced, min.
   3 tekens). OFF-tekstzoeken loopt via `/api/off-search` (proxy, met fallback naar

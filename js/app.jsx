@@ -104,13 +104,19 @@ function App() {
     setLog(saved);
   }
 
-  function repeatDayToWeeks(weeks) {
-    if (!log.length) return;
-    for (let i = 1; i <= weeks; i++) {
-      const target = addDays(dateStr, 7 * i);
-      const copy = log.map(e => ({ ...e, id: `log-${Date.now()}-${Math.random().toString(36).slice(2)}` }));
-      lsSet(`daily-log:${userSlug}:${target}`, copy); // overschrijft de doeldag
+  function repeatDayToWeekdays(weeks, days) {
+    if (!log.length || !days.length) return 0;
+    let count = 0;
+    for (let i = 1; i <= weeks * 7; i++) {
+      const target = addDays(dateStr, i);
+      const wd = new Date(target + 'T00:00:00').getDay();
+      if (days.includes(wd)) {
+        const copy = log.map(e => ({ ...e, id: `log-${Date.now()}-${Math.random().toString(36).slice(2)}` }));
+        lsSet(`daily-log:${userSlug}:${target}`, copy); // overschrijft de doeldag
+        count++;
+      }
     }
+    return count;
   }
 
   const totals = useMemo(() => log.reduce((a,e) => ({
@@ -130,7 +136,7 @@ function App() {
     <div className="min-h-screen bg-gray-50">
       {showBreakdown && macros && <MacroBreakdownModal log={log} macros={macros} totals={totals} onClose={() => setShowBreakdown(false)} />}
       {showShoppingList && <ShoppingListModal userSlug={userSlug} initialDate={dateStr} onClose={() => setShowShoppingList(false)} />}
-      {showRepeatDay && <RepeatDayModal dateStr={dateStr} count={log.length} onConfirm={repeatDayToWeeks} onClose={() => setShowRepeatDay(false)} />}
+      {showRepeatDay && <RepeatDayModal dateStr={dateStr} count={log.length} onConfirm={repeatDayToWeekdays} onClose={() => setShowRepeatDay(false)} />}
 
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[#182a48] border-b border-[#2b3e60] shadow-sm">

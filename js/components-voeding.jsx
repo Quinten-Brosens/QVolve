@@ -222,11 +222,15 @@ function ShoppingListModal({userSlug,initialDate,onClose}){
   );
 }
 
-// ─── Dag herhalen naar komende weken ──────────────────────────────────────────
+// ─── Dag herhalen naar gekozen weekdagen ──────────────────────────────────────
 function RepeatDayModal({dateStr,count,onConfirm,onClose}){
+  const weekdagen=[{d:1,label:'Ma'},{d:2,label:'Di'},{d:3,label:'Wo'},{d:4,label:'Do'},{d:5,label:'Vr'},{d:6,label:'Za'},{d:0,label:'Zo'}];
+  const baseDay=new Date(dateStr+'T00:00:00').getDay();
+  const [days,setDays]=useState([baseDay]);
   const [weeks,setWeeks]=useState(4);
-  const [done,setDone]=useState(0);
-  function go(){const w=Math.max(1,Math.min(parseInt(weeks)||0,26));onConfirm(w);setDone(w);}
+  const [done,setDone]=useState(null);
+  function toggle(d){setDays(s=>s.includes(d)?s.filter(x=>x!==d):[...s,d]);}
+  function go(){if(!days.length)return;const w=Math.max(1,Math.min(parseInt(weeks)||0,26));const n=onConfirm(w,days);setDone({n,w});}
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-md" onClick={e=>e.stopPropagation()}>
@@ -235,23 +239,30 @@ function RepeatDayModal({dateStr,count,onConfirm,onClose}){
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><Icon name="X" size={18}/></button>
         </div>
         <div className="p-5 space-y-4">
-          {done>0 ? (
+          {done ? (
             <div className="text-center py-4">
               <Icon name="CheckCircle2" size={32} className="mx-auto text-green-500 mb-2"/>
-              <p className="text-sm text-gray-700">Deze dag is gekopieerd naar dezelfde weekdag voor de komende <b>{done}</b> {done===1?'week':'weken'}.</p>
+              <p className="text-sm text-gray-700">Gekopieerd naar <b>{done.n}</b> {done.n===1?'dag':'dagen'} over de komende <b>{done.w}</b> {done.w===1?'week':'weken'}.</p>
               <button onClick={onClose} className="mt-4 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 px-6 text-sm font-medium">Klaar</button>
             </div>
           ) : count===0 ? (
             <p className="text-sm text-gray-400 text-center py-4">Deze dag is leeg — er is niets om te herhalen.</p>
           ) : (
             <>
-              <p className="text-sm text-gray-600">Kopieer <b className="text-gray-800 capitalize">{formatDateNice(dateStr)}</b> ({count} {count===1?'item':'items'}) naar <b>dezelfde weekdag</b> de komende weken.</p>
-              <div className="flex items-center gap-3">
-                <label className="text-sm text-gray-600">Aantal weken:</label>
-                <input type="number" min="1" max="26" value={weeks} onChange={e=>setWeeks(e.target.value)} className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-orange-400"/>
+              <p className="text-sm text-gray-600">Kopieer <b className="text-gray-800 capitalize">{formatDateNice(dateStr)}</b> ({count} {count===1?'item':'items'}) naar deze weekdagen:</p>
+              <div className="flex gap-1.5">
+                {weekdagen.map(w=>{const on=days.includes(w.d);return (
+                  <button key={w.d} onClick={()=>toggle(w.d)}
+                    className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-colors ${on?'bg-orange-500 text-white border-orange-500':'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}>{w.label}</button>
+                );})}
               </div>
-              <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg px-3 py-2">Let op: bestaande voeding op die weekdagen wordt overschreven.</p>
-              <button onClick={go} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 text-sm font-medium">Herhalen</button>
+              <div className="flex items-center gap-3">
+                <label className="text-sm text-gray-600">de komende</label>
+                <input type="number" min="1" max="26" value={weeks} onChange={e=>setWeeks(e.target.value)} className="w-16 border border-gray-200 rounded-lg px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-orange-400"/>
+                <label className="text-sm text-gray-600">weken</label>
+              </div>
+              <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg px-3 py-2">Let op: bestaande voeding op de gekozen weekdagen wordt overschreven.</p>
+              <button onClick={go} disabled={!days.length} className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white rounded-xl py-2.5 text-sm font-medium">Herhalen</button>
             </>
           )}
         </div>
