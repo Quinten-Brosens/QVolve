@@ -133,29 +133,55 @@ function MacroBreakdownModal({log,macros,totals,onClose}){
 }
 
 // ─── Boodschappenlijst (eigen geplande dagen, datumbereik) ────────────────────
+// Splitst een ingrediëntregel "100g havermout" in {qty:100, unit:'g', name:'havermout'}.
+function parseIngredient(s){
+  const m=String(s).trim().match(/^([\d]+(?:[.,]\d+)?)\s*(g|gr|gram|kg|ml|cl|l|el|tl|stuks?|st)?\b\s*(.+)$/i);
+  if(!m) return null;
+  const qty=parseFloat(m[1].replace(',','.'));
+  if(isNaN(qty)) return null;
+  let unit=(m[2]||'').toLowerCase();
+  if(unit==='gr'||unit==='gram') unit='g';
+  if(unit==='st'||unit==='stuk'||unit==='stuks') unit='stuks';
+  const name=m[3].trim();
+  if(!name) return null;
+  return {qty,unit,name};
+}
+
+// De boodschappenlijst toont de INGREDIËNTEN (niet de gerechten): gelogde
+// hoeveelheidsproducten + de ingrediënten van weekschema-/AI-maaltijden, opgeteld.
 function buildShoppingList(userSlug,start,end){
   if(!start||!end||start>end) return [];
-  const grams={}; const dishes={};
+  const agg={};   // key "name|unit" -> {name,unit,qty,group}
+  const plain={}; // niet te parsen ingrediënten -> {text,group,count}
+  function addQty(name,unit,qty,group){
+    const key=name.toLowerCase()+'|'+unit;
+    if(!agg[key]) agg[key]={name,unit,qty:0,group:group||'Ingrediënten'};
+    agg[key].qty+=qty;
+  }
   let d=start, guard=0;
   while(d<=end && guard++<400){
     const log=lsGet(`daily-log:${userSlug}:${d}`)||[];
     for(const e of log){
       if(typeof e.grams==='number' && e.grams>0){
-        const key=e.name.toLowerCase();
-        if(!grams[key]) grams[key]={name:e.name,group:e.group||'Overig',grams:0};
-        grams[key].grams+=e.grams;
-      } else if(e.name){
-        // Gerechten (weekschema/AI, vaste portie): toon het gerecht, niet de ingrediënten.
-        const key=e.name.toLowerCase();
-        if(!dishes[key]) dishes[key]={name:e.name,group:e.group||'Gerechten',count:0};
-        dishes[key].count++;
+        addQty(e.name,'g',e.grams,e.group||'Overig');
+      } else if(Array.isArray(e.ingredients) && e.ingredients.length){
+        for(const ing of e.ingredients){
+          const p=parseIngredient(ing);
+          if(p) addQty(p.name,p.unit,p.qty,'Ingrediënten');
+          else { const k=String(ing).toLowerCase(); if(!plain[k]) plain[k]={text:ing,group:'Ingrediënten',count:0}; plain[k].count++; }
+        }
       }
+      // Maaltijden zonder ingrediënten (losse gerechten) komen niet in de lijst.
     }
     d=addDays(d,1);
   }
   const groups={};
-  for(const g of Object.values(grams)) (groups[g.group]=groups[g.group]||[]).push(`${g.name} — ${Math.round(g.grams)} g`);
-  for(const n of Object.values(dishes)) (groups[n.group]=groups[n.group]||[]).push(n.count>1?`${n.name} ×${n.count}`:n.name);
+  for(const a of Object.values(agg)){
+    const q=Math.round(a.qty*10)/10;
+    const label = a.unit ? `${a.name} — ${q} ${a.unit}` : (q>1?`${a.name} ×${q}`:a.name);
+    (groups[a.group]=groups[a.group]||[]).push(label);
+  }
+  for(const p of Object.values(plain)) (groups[p.group]=groups[p.group]||[]).push(p.count>1?`${p.text} ×${p.count}`:p.text);
   return Object.entries(groups).map(([category,items])=>({category,items:[...new Set(items)].sort()}));
 }
 
