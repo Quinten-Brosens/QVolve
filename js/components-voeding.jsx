@@ -133,29 +133,108 @@ function MacroBreakdownModal({log,macros,totals,onClose}){
 }
 
 // ─── Boodschappenlijst (eigen geplande dagen, datumbereik) ────────────────────
-// Splitst een ingrediëntregel "100g havermout" in {qty:100, unit:'g', name:'havermout'}.
-function parseIngredient(s){
-  const m=String(s).trim().match(/^([\d]+(?:[.,]\d+)?)\s*(g|gr|gram|kg|ml|cl|l|el|tl|stuks?|st)?\b\s*(.+)$/i);
-  if(!m) return null;
-  const qty=parseFloat(m[1].replace(',','.'));
-  if(isNaN(qty)) return null;
-  let unit=(m[2]||'').toLowerCase();
-  if(unit==='gr'||unit==='gram') unit='g';
-  if(unit==='st'||unit==='stuk'||unit==='stuks') unit='stuks';
-  const name=m[3].trim();
-  if(!name) return null;
-  return {qty,unit,name};
+
+// Vaste volgorde van de supermarkt-categorieën.
+const SHOP_CATEGORIES=['Groenten & fruit','Vlees & vis','Zuivel & eieren','Brood & granen','Noten, zaden & peulvruchten','Sauzen, beleg & oliën','Kruiden & specerijen','Dranken','Overig'];
+
+// NEVO-voedingsgroep → supermarkt-categorie (voor gelogde producten met grammen).
+const NEVO_TO_SHOP={
+  'Groente':'Groenten & fruit','Fruit':'Groenten & fruit','Aardappelen en knolgewassen':'Groenten & fruit',
+  'Vlees en gevogelte':'Vlees & vis','Vis, schaal- en schelpdieren':'Vlees & vis','Vleeswaren':'Vlees & vis',
+  'Melk en melkproducten':'Zuivel & eieren','Kaas':'Zuivel & eieren','Vleesvervangers en zuivelvervangers':'Zuivel & eieren','Eieren':'Zuivel & eieren','Flesvoeding en preparaten':'Zuivel & eieren',
+  'Brood':'Brood & granen','Graanproducten en meelsoorten':'Brood & granen','Gebak en koek':'Brood & granen',
+  'Noten en zaden':'Noten, zaden & peulvruchten','Peulvruchten':'Noten, zaden & peulvruchten',
+  'Hartige sauzen':'Sauzen, beleg & oliën','Suiker, snoep, zoet beleg en zoete sauzen':'Sauzen, beleg & oliën','Hartig broodbeleg':'Sauzen, beleg & oliën','Vetten en oliën':'Sauzen, beleg & oliën','Soepen':'Sauzen, beleg & oliën','Samengestelde gerechten':'Sauzen, beleg & oliën','Hartige snacks en zoutjes':'Sauzen, beleg & oliën',
+  'Kruiden en specerijen':'Kruiden & specerijen',
+  'Niet-alcoholische dranken':'Dranken','Alcoholische dranken':'Dranken',
+};
+
+// Trefwoorden → categorie (voor losse weekschema-/AI-ingrediënten zonder NEVO-groep).
+const SHOP_KEYWORDS=[
+  ['Groenten & fruit',['appel','banaan','peer','sinaasappel','citroen','limoen','aardbei','framboos','bes','druif','mango','ananas','kiwi','meloen','perzik','abrikoos','pruim','dadel','rozijn','avocado','tomaat','komkommer','paprika','ui','sjalot','knoflook','look','wortel','wortelen','courgette','aubergine','broccoli','bloemkool','spinazie','sla','rucola','andijvie','prei','champignon','paddenstoel','boon','sperzieboon','erwt','mais','maïs','pompoen','biet','radijs','selder','venkel','asperge','spruit','kool','aardappel','zoete aardappel','bataat','kruimige','vaste','groente','fruit','banane']],
+  ['Vlees & vis',['kip','kipfilet','kalkoen','rund','rundvlees','biefstuk','gehakt','varken','varkens','spek','bacon','ham','worst','chorizo','salami','lamsvlees','lam','vis','zalm','tonijn','kabeljauw','tilapia','garnaal','garnalen','scampi','mossel','vlees','filet']],
+  ['Zuivel & eieren',['melk','yoghurt','yoghurtje','kwark','skyr','kaas','feta','mozzarella','parmezaan','room','slagroom','creme fraiche','crème fraîche','boter','ei','eieren','eiwit','eigeel','karnemelk','hüttenkäse','huttenkase','platte kaas']],
+  ['Brood & granen',['brood','boterham','wrap','tortilla','pita','toast','crackers','beschuit','havermout','haver','muesli','granola','cornflakes','rijst','pasta','spaghetti','penne','macaroni','noedel','noodle','couscous','quinoa','bulgur','meel','bloem','tarwe','cracker']],
+  ['Noten, zaden & peulvruchten',['noot','noten','amandel','walnoot','cashew','pinda','hazelnoot','pistache','zaad','zaden','chiazaad','lijnzaad','sesam','pompoenpit','zonnebloempit','linze','linzen','kikkererwt','kidneyboon','zwarte boon','tofu','tempeh','pindakaas']],
+  ['Sauzen, beleg & oliën',['olie','olijfolie','azijn','mayonaise','ketchup','mosterd','sojasaus','soja','pesto','tomatensaus','passata','gepelde tomaten','bouillon','honing','jam','confituur','chocopasta','hagelslag','suiker','siroop','saus','blik','pakje']],
+  ['Kruiden & specerijen',['paprikapoeder','komijn','kurkuma','kerrie','curry','kaneel','oregano','basilicum','tijm','rozemarijn','peterselie','koriander','dille','bieslook','laurier','nootmuskaat','gember','chilipoeder','cayenne','kruiden','specerij']],
+  ['Dranken',['water','sap','frisdrank','cola','thee','koffie','bier','wijn','drank','melkdrank','smoothie']],
+];
+
+// Voorbereidings-/hoeveelheidswoorden die we uit de naam strippen zodat dezelfde
+// ingrediënt samenvalt ("appel" == "appel in stukjes" == "verse appel").
+const PREP_WORDS=['verse','vers','gedroogde','gedroogd','gehakte','gehakt','fijngehakte','fijngehakt','gesneden','fijngesneden','geraspte','geraspt','gekookte','gekookt','rauwe','rauw','geperste','geperst','gepelde','gepeld','geroosterde','geroosterd','gebakken','gestoomde','gestoomd','gemalen','grof','fijn','grove','fijne','kleine','grote','een','wat','handje','handvol','blokjes','reepjes','plakjes','stukjes','partjes','snippers','teen','teentje','teentjes','tenen'];
+
+// Vage of niet-koopbare items die we weglaten ("peper en zout", "naar smaak", …).
+const DROP_EXACT=new Set(['peper','zout','peper en zout','zout en peper','water','kruiden','specerijen','kruidenmix','kruiden en specerijen','ijs','ijsblokjes','garnering','bouillonblokje']);
+const DROP_CONTAINS=['naar smaak','naar wens','snufje','scheutje','om te garneren','ter garnering','voor garnering','optioneel'];
+
+function normalizeIngredientName(raw){
+  let n=String(raw).toLowerCase();
+  n=n.replace(/\([^)]*\)/g,' ');               // (in stukjes) e.d. weg
+  n=n.replace(/[.,;:]+/g,' ');
+  let toks=n.split(/\s+/).filter(Boolean).filter(t=>!PREP_WORDS.includes(t));
+  return toks.join(' ').trim();
+}
+function shouldDropIngredient(name){
+  if(!name) return true;
+  if(DROP_EXACT.has(name)) return true;
+  if(name.startsWith('kruiden')||name.startsWith('specerij')) return true;
+  return DROP_CONTAINS.some(x=>name.includes(x));
+}
+function categorizeIngredient(name){
+  for(const [cat,words] of SHOP_KEYWORDS){
+    for(const w of words){ if(name===w||name.includes(w)) return cat; }
+  }
+  return 'Overig';
+}
+
+// Splitst een ingrediëntregel in {qty, unit (gecanoniseerd), name}. Werkt voor
+// "100 g havermout", "havermout 100 g" en "2 wraps". Eenheden worden naar één
+// canonieke maat herrekend (kg→g, l/cl→ml) zodat hoeveelheden mogen optellen.
+function parseIngredient(raw){
+  let s=String(raw).trim();
+  const unitRe='(kg|g|gr|gram|ml|cl|l|liter|el|eetlepel|tl|theelepel|stuks?|st|teen|tenen)';
+  let m=s.match(new RegExp('^([\\d]+(?:[.,]\\d+)?)\\s*'+unitRe+'?\\b\\s*(.+)$','i'));  // getal vooraan
+  let qty,unit,name;
+  if(m){ qty=parseFloat(m[1].replace(',','.')); unit=m[2]||''; name=m[3]; }
+  else {
+    m=s.match(new RegExp('^(.+?)\\s+([\\d]+(?:[.,]\\d+)?)\\s*'+unitRe+'?\\s*$','i')); // getal achteraan
+    if(m){ name=m[1]; qty=parseFloat(m[2].replace(',','.')); unit=m[3]||''; }
+  }
+  if(qty==null||isNaN(qty)){ name=normalizeIngredientName(s); return name?{qty:1,unit:'st',name}:null; }
+  unit=unit.toLowerCase();
+  if(unit==='kg'){qty*=1000;unit='g';}
+  else if(unit==='gr'||unit==='gram')unit='g';
+  else if(unit==='l'||unit==='liter'){qty*=1000;unit='ml';}
+  else if(unit==='cl'){qty*=10;unit='ml';}
+  else if(unit==='eetlepel')unit='el';
+  else if(unit==='theelepel')unit='tl';
+  else if(unit==='teen'||unit==='tenen')unit='st';
+  else if(unit==='stuk'||unit==='stuks')unit='st';
+  if(!unit) unit = qty>=15 ? 'g' : 'st';   // kaal getal: groot = grammen, klein = stuks
+  name=normalizeIngredientName(name);
+  return name?{qty,unit,name}:null;
+}
+
+function labelFor(name,unit,qty){
+  const cap=name.charAt(0).toUpperCase()+name.slice(1);
+  const q=Math.round(qty*10)/10;
+  if(unit==='st') return q>1?`${cap} ×${q}`:cap;
+  if(unit==='el'||unit==='tl') return `${cap} — ${q} ${unit}`;
+  return `${cap} — ${q} ${unit}`;   // g of ml
 }
 
 // De boodschappenlijst toont de INGREDIËNTEN (niet de gerechten): gelogde
-// hoeveelheidsproducten + de ingrediënten van weekschema-/AI-maaltijden, opgeteld.
+// hoeveelheidsproducten + de ingrediënten van weekschema-/AI-maaltijden, samengevoegd
+// per (genormaliseerde naam + eenheid), gesorteerd per supermarkt-categorie.
 function buildShoppingList(userSlug,start,end){
   if(!start||!end||start>end) return [];
-  const agg={};   // key "name|unit" -> {name,unit,qty,group}
-  const plain={}; // niet te parsen ingrediënten -> {text,group,count}
-  function addQty(name,unit,qty,group){
-    const key=name.toLowerCase()+'|'+unit;
-    if(!agg[key]) agg[key]={name,unit,qty:0,group:group||'Ingrediënten'};
+  const agg={};   // key "name|unit" -> {name,unit,qty,cat}
+  function addQty(name,unit,qty,cat){
+    if(shouldDropIngredient(name)) return;
+    const key=name+'|'+unit;
+    if(!agg[key]) agg[key]={name,unit,qty:0,cat:cat||categorizeIngredient(name)};
     agg[key].qty+=qty;
   }
   let d=start, guard=0;
@@ -163,12 +242,13 @@ function buildShoppingList(userSlug,start,end){
     const log=lsGet(`daily-log:${userSlug}:${d}`)||[];
     for(const e of log){
       if(typeof e.grams==='number' && e.grams>0){
-        addQty(e.name,'g',e.grams,e.group||'Overig');
+        const nm=normalizeIngredientName(e.name);
+        const cat=NEVO_TO_SHOP[e.group]||categorizeIngredient(nm);
+        addQty(nm,'g',e.grams,cat);
       } else if(Array.isArray(e.ingredients) && e.ingredients.length){
         for(const ing of e.ingredients){
           const p=parseIngredient(ing);
-          if(p) addQty(p.name,p.unit,p.qty,'Ingrediënten');
-          else { const k=String(ing).toLowerCase(); if(!plain[k]) plain[k]={text:ing,group:'Ingrediënten',count:0}; plain[k].count++; }
+          if(p) addQty(p.name,p.unit,p.qty);
         }
       }
       // Maaltijden zonder ingrediënten (losse gerechten) komen niet in de lijst.
@@ -177,12 +257,11 @@ function buildShoppingList(userSlug,start,end){
   }
   const groups={};
   for(const a of Object.values(agg)){
-    const q=Math.round(a.qty*10)/10;
-    const label = a.unit ? `${a.name} — ${q} ${a.unit}` : (q>1?`${a.name} ×${q}`:a.name);
-    (groups[a.group]=groups[a.group]||[]).push(label);
+    (groups[a.cat]=groups[a.cat]||[]).push(labelFor(a.name,a.unit,a.qty));
   }
-  for(const p of Object.values(plain)) (groups[p.group]=groups[p.group]||[]).push(p.count>1?`${p.text} ×${p.count}`:p.text);
-  return Object.entries(groups).map(([category,items])=>({category,items:[...new Set(items)].sort()}));
+  return SHOP_CATEGORIES
+    .filter(c=>groups[c]&&groups[c].length)
+    .map(category=>({category,items:[...new Set(groups[category])].sort((a,b)=>a.localeCompare(b,'nl'))}));
 }
 
 function ShoppingListModal({userSlug,initialDate,onClose}){
