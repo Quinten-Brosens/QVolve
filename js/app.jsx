@@ -14,6 +14,8 @@ function App() {
   const [activeMeal, setActiveMeal] = useState(MEAL_TIMES[0].key);
   const [customFoods, setCustomFoods] = useState([]);
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [showShoppingList, setShowShoppingList] = useState(false);
+  const [showRepeatDay, setShowRepeatDay] = useState(false);
 
   const userSlug = userName ? slugifyName(userName) : '';
 
@@ -102,6 +104,15 @@ function App() {
     setLog(saved);
   }
 
+  function repeatDayToWeeks(weeks) {
+    if (!log.length) return;
+    for (let i = 1; i <= weeks; i++) {
+      const target = addDays(dateStr, 7 * i);
+      const copy = log.map(e => ({ ...e, id: `log-${Date.now()}-${Math.random().toString(36).slice(2)}` }));
+      lsSet(`daily-log:${userSlug}:${target}`, copy); // overschrijft de doeldag
+    }
+  }
+
   const totals = useMemo(() => log.reduce((a,e) => ({
     kcal:a.kcal+e.kcal, protein:a.protein+e.protein, fat:a.fat+e.fat, carbs:a.carbs+e.carbs
   }), { kcal:0, protein:0, fat:0, carbs:0 }), [log]);
@@ -118,6 +129,8 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       {showBreakdown && macros && <MacroBreakdownModal log={log} macros={macros} totals={totals} onClose={() => setShowBreakdown(false)} />}
+      {showShoppingList && <ShoppingListModal userSlug={userSlug} initialDate={dateStr} onClose={() => setShowShoppingList(false)} />}
+      {showRepeatDay && <RepeatDayModal dateStr={dateStr} count={log.length} onConfirm={repeatDayToWeeks} onClose={() => setShowRepeatDay(false)} />}
 
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[#182a48] border-b border-[#2b3e60] shadow-sm">
@@ -140,6 +153,15 @@ function App() {
             {profile && !editingProfile && macros && (
               <div className="space-y-4">
                 <DateNav dateStr={dateStr} onChange={setDateStr} />
+
+                <div className="flex gap-2">
+                  <button onClick={() => setShowShoppingList(true)} className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-600 rounded-xl py-2 text-xs font-medium">
+                    <Icon name="ShoppingCart" size={14}/> Boodschappenlijst
+                  </button>
+                  <button onClick={() => setShowRepeatDay(true)} className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-600 rounded-xl py-2 text-xs font-medium">
+                    <Icon name="RefreshCw" size={14}/> Dag herhalen
+                  </button>
+                </div>
 
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
                   <div className="flex items-center justify-between mb-3">

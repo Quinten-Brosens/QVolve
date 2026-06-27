@@ -103,6 +103,10 @@ blauw + oranje accenten.
 - **Voeding-tab:** NEVO-databank doorzoeken (2328 items, ingebakken als
   `NEVO_DATA`), eigen producten, handmatige invoer, dagtotaal met macrobalken,
   caloriedoel aanpasbaar, datumnavigatie, 6 eetmomenten, daglogboek per maaltijd.
+- **Plannen (Voeding-tab):** knoppen bij de datumnavigatie. "Boodschappenlijst"
+  aggregeert de gelogde voeding over een datumbereik (van/tot, grammen opgeteld per
+  product, gegroepeerd per voedingsgroep, met kopieerknop). "Dag herhalen" kopieert
+  de huidige dag naar dezelfde weekdag voor X komende weken (overschrijft die dagen).
 - **Open Food Facts (merkproducten + barcode):** gefedereerd zoeken — NEVO/eigen
   producten lokaal en instant, OFF-merkproducten online erbovenop (debounced, min.
   3 tekens). OFF-tekstzoeken loopt via `/api/off-search` (proxy, met fallback naar

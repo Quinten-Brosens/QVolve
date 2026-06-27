@@ -132,6 +132,134 @@ function MacroBreakdownModal({log,macros,totals,onClose}){
   );
 }
 
+// ─── Boodschappenlijst (eigen geplande dagen, datumbereik) ────────────────────
+function buildShoppingList(userSlug,start,end){
+  if(!start||!end||start>end) return [];
+  const grams={}; const lines=[];
+  let d=start, guard=0;
+  while(d<=end && guard++<400){
+    const log=lsGet(`daily-log:${userSlug}:${d}`)||[];
+    for(const e of log){
+      if(typeof e.grams==='number' && e.grams>0){
+        const key=e.name.toLowerCase();
+        if(!grams[key]) grams[key]={name:e.name,group:e.group||'Overig',grams:0};
+        grams[key].grams+=e.grams;
+      } else if(Array.isArray(e.ingredients) && e.ingredients.length){
+        for(const ing of e.ingredients) lines.push({text:ing,group:'Uit weekschema / AI'});
+      } else if(e.name){
+        lines.push({text:e.name,group:'Overig'});
+      }
+    }
+    d=addDays(d,1);
+  }
+  const groups={};
+  for(const g of Object.values(grams)) (groups[g.group]=groups[g.group]||[]).push(`${g.name} — ${Math.round(g.grams)} g`);
+  for(const l of lines) (groups[l.group]=groups[l.group]||[]).push(l.text);
+  return Object.entries(groups).map(([category,items])=>({category,items:[...new Set(items)].sort()}));
+}
+
+function ShoppingListModal({userSlug,initialDate,onClose}){
+  const [start,setStart]=useState(initialDate);
+  const [end,setEnd]=useState(addDays(initialDate,6));
+  const [checked,setChecked]=useState({});
+  const [copied,setCopied]=useState(false);
+  const list=useMemo(()=>buildShoppingList(userSlug,start,end),[userSlug,start,end]);
+  const leeg=list.length===0;
+
+  function copy(){
+    const text=list.map(g=>`${g.category}:\n`+g.items.map(it=>`- ${it}`).join('\n')).join('\n\n');
+    try{ navigator.clipboard.writeText(text); setCopied(true); setTimeout(()=>setCopied(false),2000); }catch(e){}
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+          <span className="text-sm font-semibold text-gray-900">🛒 Boodschappenlijst</span>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><Icon name="X" size={18}/></button>
+        </div>
+        <div className="p-4 space-y-4">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Van</label>
+              <input type="date" value={start} max={end} onChange={e=>setStart(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Tot en met</label>
+              <input type="date" value={end} min={start} onChange={e=>setEnd(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"/>
+            </div>
+          </div>
+
+          {leeg ? (
+            <p className="text-sm text-gray-400 text-center py-8">Geen voeding gelogd in dit bereik.</p>
+          ) : (
+            <>
+              {list.map((g,gi)=>(
+                <div key={gi}>
+                  <p className="text-xs font-semibold text-gray-600 mb-1">{g.category}</p>
+                  <div className="space-y-0.5">
+                    {g.items.map((it,ii)=>{
+                      const k=`${gi}|${ii}`; const on=!!checked[k];
+                      return (
+                        <button key={ii} onClick={()=>setChecked(c=>({...c,[k]:!on}))}
+                          className="w-full flex items-center gap-2 text-left px-2 py-1.5 rounded-lg hover:bg-gray-50 text-sm">
+                          <Icon name={on?'CheckCircle2':'Circle'} size={16} className={on?'text-orange-500':'text-gray-300'}/>
+                          <span className={on?'line-through text-gray-400':'text-gray-700'}>{it}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              <button onClick={copy} className="w-full border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-1.5">
+                <Icon name="Copy" size={14}/> {copied?'Gekopieerd!':'Kopieer lijst'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Dag herhalen naar komende weken ──────────────────────────────────────────
+function RepeatDayModal({dateStr,count,onConfirm,onClose}){
+  const [weeks,setWeeks]=useState(4);
+  const [done,setDone]=useState(0);
+  function go(){const w=Math.max(1,Math.min(parseInt(weeks)||0,26));onConfirm(w);setDone(w);}
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-100">
+          <span className="text-sm font-semibold text-gray-900">🔁 Dag herhalen</span>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><Icon name="X" size={18}/></button>
+        </div>
+        <div className="p-5 space-y-4">
+          {done>0 ? (
+            <div className="text-center py-4">
+              <Icon name="CheckCircle2" size={32} className="mx-auto text-green-500 mb-2"/>
+              <p className="text-sm text-gray-700">Deze dag is gekopieerd naar dezelfde weekdag voor de komende <b>{done}</b> {done===1?'week':'weken'}.</p>
+              <button onClick={onClose} className="mt-4 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 px-6 text-sm font-medium">Klaar</button>
+            </div>
+          ) : count===0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">Deze dag is leeg — er is niets om te herhalen.</p>
+          ) : (
+            <>
+              <p className="text-sm text-gray-600">Kopieer <b className="text-gray-800 capitalize">{formatDateNice(dateStr)}</b> ({count} {count===1?'item':'items'}) naar <b>dezelfde weekdag</b> de komende weken.</p>
+              <div className="flex items-center gap-3">
+                <label className="text-sm text-gray-600">Aantal weken:</label>
+                <input type="number" min="1" max="26" value={weeks} onChange={e=>setWeeks(e.target.value)} className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-orange-400"/>
+              </div>
+              <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg px-3 py-2">Let op: bestaande voeding op die weekdagen wordt overschreven.</p>
+              <button onClick={go} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 text-sm font-medium">Herhalen</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function KcalAdjuster({targetKcal,onAdjust,onReset}){
   const [value,setValue]=useState(String(targetKcal));
   useEffect(()=>setValue(String(targetKcal)),[targetKcal]);
