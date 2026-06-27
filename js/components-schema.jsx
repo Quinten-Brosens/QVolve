@@ -27,7 +27,9 @@ Ontbijt: ${(prefs.ontbijt_type||[]).join(', ')||'vrij'} · Snacks: ${(prefs.snac
 Meal prep: ${prefs.meal_prep||'deels'} · Extra: ${prefs.extra||'geen'}
 
 ## Instructies
-- 7 dagen, 6 maaltijden per dag: ontbijt, snack voormiddag, lunch, snack namiddag, diner, snack avond
+- 7 dagen, 6 maaltijden per dag. Gebruik voor "mealTime" EXACT deze keys:
+  ontbijt, snack_vm, lunch, snack_nm, diner, snack_avond
+- "day" is de Nederlandse weekdagnaam: Maandag, Dinsdag, ... Zondag
 - Ingrediënten met exacte hoeveelheden (bv. "150g kipfilet", "200ml melk")
 - BELANGRIJK — macro's: tel per maaltijd de kcal/eiwit/vet/koolhydraten op tot een dagtotaal,
   en pas de hoeveelheden net zo lang aan tot elk dagtotaal binnen ±5% van de macro-doelen
@@ -36,7 +38,7 @@ Meal prep: ${prefs.meal_prep||'deels'} · Extra: ${prefs.extra||'geen'}
 - Reken nauwkeurig; een schema dat de macro's niet haalt is fout.
 - ALLEEN JSON terug, geen markdown
 
-{"days":[{"day":"Maandag","meals":[{"mealTime":"ontbijt","name":"...","ingredients":["80g havermout","200ml melk"],"tip":"...","kcal":0,"protein":0,"fat":0,"carbs":0}],"totals":{"kcal":0,"protein":0,"fat":0,"carbs":0}}],"shoppingList":[{"category":"Vlees & vis","items":["..."]}]}`;
+{"days":[{"day":"Maandag","meals":[{"mealTime":"snack_vm","name":"...","ingredients":["80g havermout","200ml melk"],"tip":"...","kcal":0,"protein":0,"fat":0,"carbs":0}],"totals":{"kcal":0,"protein":0,"fat":0,"carbs":0}}],"shoppingList":[{"category":"Vlees & vis","items":["..."]}]}`;
 }
 
 function VragenlijstStap({vraag,waarde,onChange}){
@@ -70,7 +72,78 @@ function VragenlijstStap({vraag,waarde,onChange}){
     className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none" />;
 }
 
-function WeekSchemaPanel({macros,userSlug,onLoadDayToLog,onGoToVoeding}){
+// ─── Weekschema afdrukken (printvenster) ──────────────────────────────────────
+function printWeekSchema(plan){
+  const esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const label=mt=>{const m=MEAL_TIMES.find(x=>x.key===normalizeMealTime(mt));return m?m.label:mt;};
+  let h='<h1>Qvolve weekschema</h1>';
+  (plan.days||[]).forEach(dag=>{
+    h+=`<h2>${esc(dag.day)}</h2>`;
+    (dag.meals||[]).forEach(m=>{
+      h+=`<div class="meal"><div class="mt">${esc(label(m.mealTime))} — <b>${esc(m.name)}</b> <span class="mac">${Math.round(m.kcal||0)} kcal · ${Math.round(m.protein||0)}g E · ${Math.round(m.fat||0)}g V · ${Math.round(m.carbs||0)}g K</span></div>`;
+      if(Array.isArray(m.ingredients)&&m.ingredients.length) h+=`<ul>${m.ingredients.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`;
+      if(m.tip) h+=`<p class="tip">💡 ${esc(m.tip)}</p>`;
+      h+='</div>';
+    });
+    if(dag.totals) h+=`<p class="tot">Dagtotaal: ${Math.round(dag.totals.kcal)} kcal · ${Math.round(dag.totals.protein)}g eiwit · ${Math.round(dag.totals.fat)}g vet · ${Math.round(dag.totals.carbs)}g KH</p>`;
+  });
+  if(Array.isArray(plan.shoppingList)&&plan.shoppingList.length){
+    h+='<h2>Boodschappenlijst</h2>';
+    plan.shoppingList.forEach(c=>{h+=`<h3>${esc(c.category)}</h3><ul>${(c.items||[]).map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`;});
+  }
+  const css='body{font-family:Arial,Helvetica,sans-serif;color:#111;max-width:820px;margin:24px auto;padding:0 16px}h1{color:#f97316;margin:0 0 12px}h2{border-bottom:2px solid #1e3a8a;color:#1e3a8a;margin:22px 0 6px;padding-bottom:2px}h3{margin:10px 0 2px;font-size:14px}.meal{margin:6px 0 12px}.mt{font-size:14px}.mac{color:#666;font-size:12px}ul{margin:4px 0 4px 18px;padding:0}li{font-size:13px;margin:1px 0}.tip{font-size:12px;color:#888;font-style:italic;margin:2px 0}.tot{font-size:12px;color:#333;background:#f4f4f5;padding:4px 8px;border-radius:4px;display:inline-block}@media print{h2{page-break-after:avoid}.meal{page-break-inside:avoid}}';
+  const w=window.open('','_blank');
+  if(!w){alert('Sta pop-ups toe om het schema af te drukken.');return;}
+  w.document.write(`<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Qvolve weekschema</title><style>${css}</style></head><body>${h}</body></html>`);
+  w.document.close(); w.focus();
+  setTimeout(()=>{try{w.print();}catch(e){}},350);
+}
+
+// ─── Weekschema importeren in logboek ─────────────────────────────────────────
+function ImportSchemaModal({plan,onImport,onClose,onGoToVoeding}){
+  const comingMonday=()=>{const d=new Date();const wd=d.getDay();const diff=(1-wd+7)%7;d.setDate(d.getDate()+diff);return toDateStr(d);};
+  const [startDate,setStartDate]=useState(comingMonday());
+  const [weeks,setWeeks]=useState(1);
+  const [done,setDone]=useState(null);
+  const monday=mondayOf(startDate);
+  function go(){const w=Math.max(1,Math.min(parseInt(weeks)||0,12));const r=onImport(plan,startDate,w);setDone({...r,w});}
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-100">
+          <span className="text-sm font-semibold text-gray-900">📥 Schema importeren</span>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><Icon name="X" size={18}/></button>
+        </div>
+        <div className="p-5 space-y-4">
+          {done ? (
+            <div className="text-center py-4">
+              <Icon name="CheckCircle2" size={32} className="mx-auto text-green-500 mb-2"/>
+              <p className="text-sm text-gray-700">Schema geladen vanaf <b className="capitalize">{formatDateNice(done.monday)}</b>, voor <b>{done.w}</b> {done.w===1?'week':'weken'} ({done.count} dagen).</p>
+              <button onClick={()=>{onClose();onGoToVoeding&&onGoToVoeding();}} className="mt-4 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 px-6 text-sm font-medium">Naar logboek</button>
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Vanaf welke datum?</label>
+                <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"/>
+                <p className="text-[11px] text-gray-400 mt-1">Start op de maandag van die week: <b className="capitalize">{formatDateNice(monday)}</b>. Maandag→maandag, dinsdag→dinsdag, …</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-sm text-gray-600">Aanhouden voor</label>
+                <input type="number" min="1" max="12" value={weeks} onChange={e=>setWeeks(e.target.value)} className="w-16 border border-gray-200 rounded-lg px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-orange-400"/>
+                <label className="text-sm text-gray-600">{(parseInt(weeks)||0)===1?'week':'weken'}</label>
+              </div>
+              <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg px-3 py-2">Let op: bestaande voeding op die dagen wordt overschreven.</p>
+              <button onClick={go} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 text-sm font-medium">Importeren</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WeekSchemaPanel({macros,userSlug,onImport,onGoToVoeding}){
   const [fase,setFase]=useState('loading');
   const [stapIndex,setStapIndex]=useState(0);
   const [antwoorden,setAntwoorden]=useState({});
@@ -79,11 +152,7 @@ function WeekSchemaPanel({macros,userSlug,onLoadDayToLog,onGoToVoeding}){
   const [genError,setGenError]=useState('');
   const [selectedDay,setSelectedDay]=useState(0);
   const [showShopping,setShowShopping]=useState(false);
-  const [loadedDays,setLoadedDays]=useState(new Set());
-  const [startDate,setStartDate]=useState(toDateStr(new Date()));
-
-  // Dag i van het schema komt op startDate + i dagen.
-  function getDagDatum(i){ return addDays(startDate, i); }
+  const [showImport,setShowImport]=useState(false);
 
   useEffect(()=>{
     const prefs=lsGet(`weekschema-prefs:${userSlug}`);
@@ -154,7 +223,9 @@ function WeekSchemaPanel({macros,userSlug,onLoadDayToLog,onGoToVoeding}){
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2"><Icon name="Calendar" size={16} className="text-orange-500"/><span className="text-sm font-semibold text-gray-900">Jouw weekschema</span></div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 justify-end">
+              <button onClick={()=>setShowImport(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500 text-white hover:bg-orange-600">📥 Importeren</button>
+              <button onClick={()=>printWeekSchema(plan)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">🖨️ Afdrukken</button>
               <button onClick={()=>setShowShopping(!showShopping)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${showShopping?'bg-orange-50 border-orange-300 text-orange-600':'border-gray-200 text-gray-600'}`}>🛒 Boodschappen</button>
               <button onClick={()=>{setPlan(null);lsDel(`weekschema-plan:${userSlug}`);setFase('vragenlijst');setStapIndex(0);}} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600"><Icon name="RefreshCw" size={12}/> Opnieuw</button>
             </div>
@@ -166,11 +237,6 @@ function WeekSchemaPanel({macros,userSlug,onLoadDayToLog,onGoToVoeding}){
                 {d.day||`Dag ${i+1}`}
               </button>
             ))}
-          </div>
-          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
-            <label className="text-xs text-gray-500">Schema start op:</label>
-            <input type="date" value={startDate} onChange={e=>{setStartDate(e.target.value);setLoadedDays(new Set());}}
-              className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"/>
           </div>
         </div>
 
@@ -188,20 +254,11 @@ function WeekSchemaPanel({macros,userSlug,onLoadDayToLog,onGoToVoeding}){
 
         {!showShopping&&dag&&(
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-900 capitalize">{dag.day} <span className="text-xs font-normal text-gray-400">· {formatDateNice(getDagDatum(selectedDay))}</span></h3>
-              {!loadedDays.has(selectedDay)&&(
-                <button onClick={()=>{onLoadDayToLog(dag,getDagDatum(selectedDay));setLoadedDays(s=>new Set([...s,selectedDay]));onGoToVoeding();}}
-                  className="text-xs text-white bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-lg font-medium transition-colors">
-                  📥 Laden in logboek
-                </button>
-              )}
-              {loadedDays.has(selectedDay)&&<span className="text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-lg">✓ Geladen</span>}
-            </div>
+            <h3 className="text-sm font-semibold text-gray-900">{dag.day}</h3>
             {(dag.meals||[]).map((meal,i)=>(
               <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold text-orange-600">{MEAL_TIMES.find(m=>m.key===meal.mealTime)?.label||meal.mealTime}</span>
+                  <span className="text-xs font-semibold text-orange-600">{MEAL_TIMES.find(m=>m.key===normalizeMealTime(meal.mealTime))?.label||meal.mealTime}</span>
                   <span className="text-xs text-gray-400">{meal.kcal} kcal · {meal.protein}g E</span>
                 </div>
                 <p className="text-sm font-semibold text-gray-900 mb-1">{meal.name}</p>
@@ -217,6 +274,7 @@ function WeekSchemaPanel({macros,userSlug,onLoadDayToLog,onGoToVoeding}){
             )}
           </div>
         )}
+        {showImport && <ImportSchemaModal plan={plan} onImport={onImport} onClose={()=>setShowImport(false)} onGoToVoeding={onGoToVoeding}/>}
       </div>
     );
   }

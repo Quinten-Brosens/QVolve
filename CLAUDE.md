@@ -115,9 +115,15 @@ blauw + oranje accenten.
   (`html5-qrcode`, lazy van CDN) → `lookupOffBarcode()` rechtstreeks op de v2-API.
   OFF-producten worden door `mapOffProduct()` op het NEVO-formaat gemapt (per 100g).
 - **Weekplan-tab:** 11-stappen vragenlijst → Gemini genereert 7-daags menu met
-  ingrediënten, hoeveelheden, tips, macros en boodschappenlijst. Een instelbare
-  **startdatum** bepaalt de datummapping (dag i = startdatum + i, standaard vandaag);
-  elke dag toont z'n werkelijke datum en wordt via "Laden in logboek" daarop geladen.
+  ingrediënten, hoeveelheden, tips, macros en boodschappenlijst. **Importeren**
+  vraagt een startdatum (gesnapt naar de maandag van die week) + aantal weken;
+  het schema wordt **weekdag-uitgelijnd** geladen (Maandag→maandag, …), voor X
+  weken, en overschrijft die dagen. Maaltijdtijden worden via `normalizeMealTime()`
+  op de juiste eetmoment-keys gezet (snacks belanden niet meer onder ontbijt) en
+  de **ingrediënten** worden mee in het logboek opgenomen. **Afdrukken** opent een
+  printvenster met het volledige schema + boodschappenlijst (`printWeekSchema()`).
+  Datum-/maaltijdhelpers (`mondayOf`, `DAG_OFFSET`, `normalizeMealTime`) staan in
+  `lib.jsx`.
 - **Training-tab:** nu nog een placeholder. Nog uit te bouwen.
 - Macroberekening: Harris-Benedict BMR × activiteitsfactor, met FitChef-,
   percentage- en keto-profielen.

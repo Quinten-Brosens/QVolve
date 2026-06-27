@@ -135,7 +135,7 @@ function MacroBreakdownModal({log,macros,totals,onClose}){
 // ─── Boodschappenlijst (eigen geplande dagen, datumbereik) ────────────────────
 function buildShoppingList(userSlug,start,end){
   if(!start||!end||start>end) return [];
-  const grams={}; const lines=[];
+  const grams={}; const dishes={};
   let d=start, guard=0;
   while(d<=end && guard++<400){
     const log=lsGet(`daily-log:${userSlug}:${d}`)||[];
@@ -144,17 +144,18 @@ function buildShoppingList(userSlug,start,end){
         const key=e.name.toLowerCase();
         if(!grams[key]) grams[key]={name:e.name,group:e.group||'Overig',grams:0};
         grams[key].grams+=e.grams;
-      } else if(Array.isArray(e.ingredients) && e.ingredients.length){
-        for(const ing of e.ingredients) lines.push({text:ing,group:'Uit weekschema / AI'});
       } else if(e.name){
-        lines.push({text:e.name,group:'Overig'});
+        // Gerechten (weekschema/AI, vaste portie): toon het gerecht, niet de ingrediënten.
+        const key=e.name.toLowerCase();
+        if(!dishes[key]) dishes[key]={name:e.name,group:e.group||'Gerechten',count:0};
+        dishes[key].count++;
       }
     }
     d=addDays(d,1);
   }
   const groups={};
   for(const g of Object.values(grams)) (groups[g.group]=groups[g.group]||[]).push(`${g.name} — ${Math.round(g.grams)} g`);
-  for(const l of lines) (groups[l.group]=groups[l.group]||[]).push(l.text);
+  for(const n of Object.values(dishes)) (groups[n.group]=groups[n.group]||[]).push(n.count>1?`${n.name} ×${n.count}`:n.name);
   return Object.entries(groups).map(([category,items])=>({category,items:[...new Set(items)].sort()}));
 }
 
@@ -697,12 +698,17 @@ function DailyLogList({log,onRemove}){
               {entries.length===0?<p className="text-xs text-gray-300 pl-1">Nog niets gelogd</p>:
                 <div className="space-y-1.5 pl-1">
                   {entries.map(e=>(
-                    <div key={e.id} className="flex items-center justify-between py-1 border-b border-gray-50 last:border-0">
-                      <p className="text-sm text-gray-800 truncate flex-1">{e.name}{e.grams?` · ${e.grams}g`:''}</p>
-                      <div className="flex items-center gap-2 ml-2">
-                        <span className="text-xs text-gray-400">{Math.round(e.kcal)} kcal</span>
-                        <button onClick={()=>onRemove(e.id)} className="text-gray-300 hover:text-red-500"><Icon name="Trash2" size={15}/></button>
+                    <div key={e.id} className="py-1 border-b border-gray-50 last:border-0">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-gray-800 truncate flex-1">{e.name}{e.grams?` · ${e.grams}g`:''}</p>
+                        <div className="flex items-center gap-2 ml-2">
+                          <span className="text-xs text-gray-400">{Math.round(e.kcal)} kcal</span>
+                          <button onClick={()=>onRemove(e.id)} className="text-gray-300 hover:text-red-500"><Icon name="Trash2" size={15}/></button>
+                        </div>
                       </div>
+                      {Array.isArray(e.ingredients)&&e.ingredients.length>0 && (
+                        <p className="text-[11px] text-gray-400 mt-0.5">{e.ingredients.join(' · ')}</p>
+                      )}
                     </div>
                   ))}
                 </div>

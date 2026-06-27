@@ -89,19 +89,29 @@ function App() {
     lsSet(`custom-foods:${userSlug}`, updated);
   }
 
-  function loadWeekDayToLog(dag, dagDateStr) {
-    const entries = (dag.meals || []).flatMap(meal =>
-      [{ id: `log-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-         name: meal.name, grams: null,
-         kcal: meal.kcal||0, protein: meal.protein||0, fat: meal.fat||0, carbs: meal.carbs||0,
-         source: 'weekschema', mealTime: meal.mealTime }]
-    );
-    const existing = lsGet(`daily-log:${userSlug}:${dagDateStr}`) || [];
-    const merged = [...existing, ...entries];
-    lsSet(`daily-log:${userSlug}:${dagDateStr}`, merged);
-    setDateStr(dagDateStr);
-    const saved = lsGet(`daily-log:${userSlug}:${dagDateStr}`) || [];
-    setLog(saved);
+  function mealToEntry(meal) {
+    return { id: `log-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: meal.name, grams: null,
+      kcal: meal.kcal||0, protein: meal.protein||0, fat: meal.fat||0, carbs: meal.carbs||0,
+      source: 'weekschema', mealTime: normalizeMealTime(meal.mealTime), ingredients: meal.ingredients };
+  }
+
+  // Importeer het volledige schema, weekdag-uitgelijnd (Maandag→maandag), voor X weken.
+  // startDate wordt naar de maandag van die week gesnapt; bestaande dagen worden overschreven.
+  function importWeekSchema(plan, startDate, weeks) {
+    const monday = mondayOf(startDate);
+    let count = 0;
+    for (let w = 0; w < weeks; w++) {
+      (plan.days || []).forEach((dag, i) => {
+        const off = DAG_OFFSET[(dag.day || '').toLowerCase()] ?? i;
+        const target = addDays(monday, w * 7 + off);
+        lsSet(`daily-log:${userSlug}:${target}`, (dag.meals || []).map(mealToEntry));
+        count++;
+      });
+    }
+    setDateStr(monday);
+    setLog(lsGet(`daily-log:${userSlug}:${monday}`) || []);
+    return { count, monday };
   }
 
   function repeatDayToWeekdays(weeks, days) {
@@ -215,7 +225,7 @@ function App() {
 
         {tab === 'weekschema' && (
           profile && macros ? (
-            <WeekSchemaPanel macros={macros} userSlug={userSlug} onLoadDayToLog={loadWeekDayToLog} onGoToVoeding={() => setTab('voeding')}/>
+            <WeekSchemaPanel macros={macros} userSlug={userSlug} onImport={importWeekSchema} onGoToVoeding={() => setTab('voeding')}/>
           ) : (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
               <Icon name="Calendar" size={28} className="mx-auto text-gray-300 mb-3"/>

@@ -346,6 +346,31 @@ function toDateStr(d) {
 }
 function addDays(dateStr, n) { const d=new Date(dateStr+'T00:00:00'); d.setDate(d.getDate()+n); return toDateStr(d); }
 function formatDateNice(dateStr) { return new Date(dateStr+'T00:00:00').toLocaleDateString('nl-BE',{weekday:'long',day:'numeric',month:'long'}); }
+// Maandag van de week waarin dateStr valt (lokaal).
+function mondayOf(dateStr) {
+  const d = new Date(dateStr+'T00:00:00');
+  const wd = d.getDay();              // 0=zo..6=za
+  const diff = wd === 0 ? -6 : 1 - wd; // naar maandag
+  d.setDate(d.getDate() + diff);
+  return toDateStr(d);
+}
+// Weekdagnaam (schema) → offset vanaf maandag (Maandag=0 … Zondag=6).
+const DAG_OFFSET = { maandag:0, dinsdag:1, woensdag:2, donderdag:3, vrijdag:4, zaterdag:5, zondag:6 };
+// AI-/schema-maaltijdtijden → canonieke MEAL_TIMES-key (vangt spaties/varianten op).
+const MEALTIME_MAP = {
+  'ontbijt':'ontbijt',
+  'snack voormiddag':'snack_vm', 'snack_vm':'snack_vm', 'snack vm':'snack_vm', 'voormiddag':'snack_vm',
+  'lunch':'lunch', 'middagmaal':'lunch',
+  'snack namiddag':'snack_nm', 'snack_nm':'snack_nm', 'snack nm':'snack_nm', 'namiddag':'snack_nm',
+  'diner':'diner', 'avondmaal':'diner', 'avondeten':'diner',
+  'snack avond':'snack_avond', 'snack_avond':'snack_avond', 'avondsnack':'snack_avond',
+};
+function normalizeMealTime(mt) {
+  if (!mt) return 'ontbijt';
+  const k = String(mt).toLowerCase().trim();
+  if (MEALTIME_MAP[k]) return MEALTIME_MAP[k];
+  return MEAL_TIMES.some(m => m.key === k) ? k : 'ontbijt';
+}
 function groupByMeal(log) {
   const map = {}; for(const m of MEAL_TIMES) map[m.key]=[];
   for(const e of log) { const k=MEAL_TIMES.some(m=>m.key===e.mealTime)?e.mealTime:MEAL_TIMES[0].key; map[k].push(e); }
