@@ -11,11 +11,14 @@ function App() {
   const [editingProfile, setEditingProfile] = useState(false);
   const [log, setLog] = useState([]);
   const [dateStr, setDateStr] = useState(toDateStr(new Date()));
-  const [activeMeal, setActiveMeal] = useState(MEAL_TIMES[0].key);
   const [customFoods, setCustomFoods] = useState([]);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [showRepeatDay, setShowRepeatDay] = useState(false);
+  const [showAddOverlay, setShowAddOverlay] = useState(false);
+  const [addOverlayMeal, setAddOverlayMeal] = useState(MEAL_TIMES[0].key);
+
+  function openAddOverlay(meal){ setAddOverlayMeal(meal||MEAL_TIMES[0].key); setShowAddOverlay(true); }
 
   const userSlug = userName ? slugifyName(userName) : '';
 
@@ -71,7 +74,7 @@ function App() {
   }
 
   function addLogEntries(entries, mealOverride) {
-    const meal = mealOverride || activeMeal;
+    const meal = mealOverride || addOverlayMeal;
     const newLog = [...log, ...entries.map(e => ({ ...e, mealTime: meal }))];
     setLog(newLog);
     lsSet(`daily-log:${userSlug}:${dateStr}`, newLog);
@@ -147,6 +150,7 @@ function App() {
       {showBreakdown && macros && <MacroBreakdownModal log={log} macros={macros} totals={totals} onClose={() => setShowBreakdown(false)} />}
       {showShoppingList && <ShoppingListModal userSlug={userSlug} initialDate={dateStr} onClose={() => setShowShoppingList(false)} />}
       {showRepeatDay && <RepeatDayModal dateStr={dateStr} count={log.length} onConfirm={repeatDayToWeekdays} onClose={() => setShowRepeatDay(false)} />}
+      {showAddOverlay && <AddFoodOverlay pool={searchPool} onAdd={(entries,meal)=>{addLogEntries(entries,meal);setShowAddOverlay(false);}} onSaveCustom={addCustomFood} onClose={()=>setShowAddOverlay(false)} initialMeal={addOverlayMeal} remaining={remaining}/>}
 
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[#182a48] border-b border-[#2b3e60] shadow-sm">
@@ -204,18 +208,13 @@ function App() {
                   <p className="text-[10px] text-gray-400 pt-2">BMR {macros.bmr} · TDEE {macros.tdee} kcal · {(MACRO_PROFILES[profile.macroProfile]||MACRO_PROFILES.normal).label}</p>
                 </div>
 
-                <div>
-                  <p className="text-xs text-gray-400 mb-1.5">Voeg toe aan:</p>
-                  <MealTimeSelector active={activeMeal} onChange={setActiveMeal}/>
-                </div>
+                <DailyLogList log={log} onRemove={removeLogEntry} onOpenAdd={openAddOverlay}/>
 
-                <AddFoodPanel pool={searchPool} onAdd={addLogEntries} onSaveCustom={addCustomFood}/>
-
-                {remaining && remaining.kcal > 50 && (
-                  <MealSuggestionPanel remaining={remaining} onAdd={addLogEntries}/>
-                )}
-
-                <DailyLogList log={log} onRemove={removeLogEntry}/>
+                {/* FAB — voeg toe aan dagboek */}
+                <button onClick={()=>openAddOverlay(MEAL_TIMES[0].key)}
+                  className="fixed bottom-20 right-4 z-30 w-14 h-14 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white rounded-full shadow-xl flex items-center justify-center transition-transform">
+                  <Icon name="Plus" size={26}/>
+                </button>
 
                 <p className="text-[10px] text-gray-400 text-center pt-1">NEVO-online {NEVO_VERSION}, RIVM Bilthoven</p>
               </div>

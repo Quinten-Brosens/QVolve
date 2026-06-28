@@ -1,30 +1,76 @@
 // ─── WeekSchema ───────────────────────────────────────────────────────────────
 const VRAGENLIJST = [
-  {id:'budget',label:'Weekbudget voor boodschappen?',type:'single',options:[{value:'laag',label:'Laag (< €40/week)'},{value:'gemiddeld',label:'Gemiddeld (€40–€80/week)'},{value:'hoog',label:'Hoog (€80+/week)'}]},
-  {id:'kooktijd',label:'Kooktijd per maaltijd?',type:'single',options:[{value:'snel',label:'Snel (< 20 min)'},{value:'normaal',label:'Normaal (20–40 min)'},{value:'uitgebreid',label:'Uitgebreid (40+ min)'}]},
-  {id:'kookdagen',label:'Op hoeveel dagen per week kook je?',type:'single',options:[{value:'2-3',label:'2–3 dagen (meal prep)'},{value:'4-5',label:'4–5 dagen'},{value:'7',label:'Elke dag vers'}]},
-  {id:'eetstijl',label:'Welke eetstijl past bij jou?',type:'multi',options:[{value:'belgisch',label:'🇧🇪 Klassiek Belgisch/Hollands'},{value:'mediterraan',label:'🫒 Mediterraan'},{value:'aziatisch',label:'🍜 Aziatisch'},{value:'mexicaans',label:'🌮 Mexicaans'},{value:'gemengd',label:'🌍 Alles door elkaar'}]},
-  {id:'dieet',label:'Voedingsrestricties?',type:'multi',options:[{value:'geen',label:'Geen restricties'},{value:'glutenvrij',label:'Glutenvrij'},{value:'lactosevrij',label:'Lactosevrij'},{value:'vegetarisch',label:'Vegetarisch'},{value:'vegan',label:'Vegan'},{value:'halal',label:'Halal'}]},
-  {id:'niet_lust',label:'Wat eet je absoluut niet?',type:'text',placeholder:'bv. lever, spruitjes, garnalen...'},
-  {id:'favorieten',label:'Favoriete maaltijden of ingrediënten?',type:'text',placeholder:'bv. kip, pasta, rijst, broccoli, zalm...'},
-  {id:'ontbijt_type',label:'Ontbijtvoorkeur?',type:'multi',options:[{value:'havermout',label:'🥣 Havermout'},{value:'brood',label:'🍞 Brood'},{value:'eieren',label:'🍳 Eieren'},{value:'kwark_yoghurt',label:'🥛 Kwark/yoghurt'},{value:'smoothie',label:'🥤 Smoothie'},{value:'klein',label:'☕ Klein ontbijt'}]},
-  {id:'snacks',label:'Snacks tussendoor?',type:'multi',options:[{value:'fruit',label:'🍎 Fruit'},{value:'noten',label:'🥜 Noten'},{value:'kwark',label:'🥛 Kwark/yoghurt'},{value:'rijstwafel',label:'🌾 Rijstwafels'},{value:'proteïnereep',label:'💪 Proteïnereep'},{value:'groenten',label:'🥕 Rauwkost'}]},
-  {id:'meal_prep',label:'Rekening houden met meal prep?',type:'single',options:[{value:'ja',label:'Ja, zo weinig mogelijk kookbeurten'},{value:'deels',label:'Deels — avondmaal varieert, maar ontbijt/lunch mag herhalen'},{value:'nee',label:'Nee, elke dag anders'}]},
-  {id:'extra',label:'Nog iets anders dat de AI moet weten?',type:'text',placeholder:'bv. ik sport \'s ochtends, gezin van 4...'},
+  {id:'budget',label:'Weekbudget voor boodschappen?',type:'single',options:[
+    {value:'heel_laag',label:'💰 Heel laag — zo goedkoop mogelijk, maaltijden mogen veel herhalen (< €30/week)'},
+    {value:'laag',label:'Laag (€30–€50/week)'},
+    {value:'gemiddeld',label:'Gemiddeld (€50–€80/week)'},
+    {value:'hoog',label:'Hoog — gevarieerde ingrediënten, geen compromis (€80+/week)'},
+  ]},
+  {id:'variatie',label:'Hoeveel variatie wil je in je weekmenu?',type:'single',options:[
+    {value:'minimaal',label:'🔄 Minimaal — dezelfde maaltijden zo veel mogelijk herhalen (makkelijk & goedkoop)'},
+    {value:'deels',label:'🔁 Gedeeltelijk — ontbijt & lunch mogen herhalen, diner varieert'},
+    {value:'veel',label:'🌈 Veel — elke dag iets anders, ik hou van afwisseling'},
+  ]},
+  {id:'ontbijt',label:'Wat eet je graag als ontbijt? Wees concreet.',type:'text',placeholder:'bv. havermout met banaan en chiazaad, boterhammen met kaas, eieren met groenten, kwark met fruit...'},
+  {id:'lunch',label:'Hoe wil je jouw lunch?',type:'single',options:[
+    {value:'warm',label:'🍲 Warm (soep, restjes van gisteren, warme pasta...)'},
+    {value:'koud',label:'🥪 Koud (boterham, wrap, salade)'},
+    {value:'gemengd',label:'🔄 Afwisselend — beide is prima'},
+  ]},
+  {id:'kooktijd',label:'Hoeveel tijd wil je kwijt aan het avondmaal koken?',type:'single',options:[
+    {value:'snel',label:'⚡ Snel (< 20 min — simpel en efficiënt)'},
+    {value:'normaal',label:'🕐 Normaal (20–40 min)'},
+    {value:'uitgebreid',label:'👨‍🍳 Uitgebreid (40+ min — ik kook graag)'},
+  ]},
+  {id:'eetstijl',label:'Welke eetstijl past bij jou?',type:'multi',options:[
+    {value:'belgisch',label:'🇧🇪 Klassiek Belgisch/Hollands'},
+    {value:'mediterraan',label:'🫒 Mediterraan'},
+    {value:'aziatisch',label:'🍜 Aziatisch'},
+    {value:'mexicaans',label:'🌮 Mexicaans'},
+    {value:'gemengd',label:'🌍 Alles door elkaar'},
+  ]},
+  {id:'dieet',label:'Voedingsrestricties of voorkeuren?',type:'multi',options:[
+    {value:'geen',label:'Geen restricties'},
+    {value:'glutenvrij',label:'Glutenvrij'},
+    {value:'lactosevrij',label:'Lactosevrij'},
+    {value:'vegetarisch',label:'Vegetarisch'},
+    {value:'vegan',label:'Vegan'},
+    {value:'halal',label:'Halal'},
+  ]},
+  {id:'niet_lust',label:'Wat eet je absoluut niet? (of allergieën)',type:'text',placeholder:'bv. lever, spruitjes, garnalen, noten...'},
+  {id:'snacks',label:'Snacks tussendoor?',type:'multi',options:[
+    {value:'fruit',label:'🍎 Fruit'},
+    {value:'noten',label:'🥜 Noten'},
+    {value:'kwark',label:'🥛 Kwark/yoghurt'},
+    {value:'proteïnereep',label:'💪 Proteïnereep'},
+    {value:'groenten',label:'🥕 Rauwkost'},
+    {value:'geen',label:'🚫 Liever geen snacks'},
+  ]},
+  {id:'extra',label:'Nog iets anders dat het schema moet weten?',type:'text',placeholder:'bv. ik sport \'s ochtends, gezin van 4, ik werk in ploegen, ik wil veel eiwit bij het ontbijt...'},
 ];
 
 function buildSchemaPrompt(macros,prefs){
+  const variatie=prefs.variatie||'deels';
+  const varTip=variatie==='minimaal'
+    ?'Herhaal maaltijden MAXIMAAL. Gebruik hetzelfde ontbijt elke dag, dezelfde lunch elke dag, en beperk het aantal verschillende diners tot 2-3 in de week. Kies goedkope basisingrediënten (kip, eieren, havermout, rijst, pasta).'
+    :variatie==='veel'
+    ?'Zoveel mogelijk variatie — elke dag andere maaltijden en andere ingrediënten.'
+    :'Ontbijt en lunch mogen dagelijks herhalen, maar varieer de diners.';
+
   return `Je bent een professionele sportdiëtist. Stel een 7-daags weekmenu op.
 
 ## Macro-doelen per dag
 - Calorieën: ${Math.round(macros.targetKcal)} kcal · Eiwit: ${Math.round(macros.proteinG)}g · Vet: ${Math.round(macros.fatG)}g · KH: ${Math.round(macros.carbsG)}g
 
 ## Voorkeuren
-Budget: ${prefs.budget||'gemiddeld'} · Kooktijd: ${prefs.kooktijd||'normaal'} · Kookdagen: ${prefs.kookdagen||'4-5'}
+Budget: ${prefs.budget||'gemiddeld'} · Kooktijd avondmaal: ${prefs.kooktijd||'normaal'}
+Variatie-instructie: ${varTip}
+Ontbijt (concreet gewenst): ${prefs.ontbijt||'vrij te kiezen'}
+Lunch voorkeur: ${prefs.lunch||'gemengd'}
 Eetstijl: ${(prefs.eetstijl||[]).join(', ')||'gemengd'} · Dieet: ${(prefs.dieet||[]).join(', ')||'geen'}
-Niet: ${prefs.niet_lust||'niets specifieks'} · Favorieten: ${prefs.favorieten||'geen'} 
-Ontbijt: ${(prefs.ontbijt_type||[]).join(', ')||'vrij'} · Snacks: ${(prefs.snacks||[]).join(', ')||'vrij'}
-Meal prep: ${prefs.meal_prep||'deels'} · Extra: ${prefs.extra||'geen'}
+Absoluut niet eten / allergieën: ${prefs.niet_lust||'niets specifieks'}
+Snacks: ${(prefs.snacks||[]).join(', ')||'vrij'}
+Extra info: ${prefs.extra||'geen'}
 
 ## Instructies
 - 7 dagen, 6 maaltijden per dag. Gebruik voor "mealTime" EXACT deze keys:

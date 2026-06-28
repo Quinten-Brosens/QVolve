@@ -38,7 +38,10 @@ function MacroRing({label,consumed,target,color}){
       </svg>
       <div className="text-xs font-medium mt-1" style={{color:ringColor}}>{label}</div>
       <div className="text-[11px] text-gray-400 mt-0.5">
-        {over?<span className="text-red-500">{Math.round(consumed-target)}g te veel</span>:`${Math.round(remaining)}g over`}
+        {over
+          ? <span className="text-red-500">{Math.round(consumed-target)}g te veel</span>
+          : <span>{Math.round(consumed)}<span className="text-gray-300">/{Math.round(target)}g</span></span>
+        }
       </div>
     </div>
   );
@@ -324,6 +327,8 @@ function ShoppingListModal({userSlug,initialDate,onClose}){
   const [checked,setChecked]=useState(()=>new Set(loadState().checked||[]));
   const [extras,setExtras]=useState(()=>loadState().extras||[]);
   const [overrides,setOverrides]=useState(()=>loadState().overrides||{});
+  const [extraPerson,setExtraPerson]=useState(()=>loadState().extraPerson||null);
+  const [showExtraPersonPanel,setShowExtraPersonPanel]=useState(false);
 
   // Herlaad state als datumbereik wijzigt
   React.useEffect(()=>{
@@ -331,13 +336,14 @@ function ShoppingListModal({userSlug,initialDate,onClose}){
     setChecked(new Set(s.checked||[]));
     setExtras(s.extras||[]);
     setOverrides(s.overrides||{});
+    setExtraPerson(s.extraPerson||null);
     setEditKey(null);
   },[storeKey]);
 
   // Sla state op bij elke wijziging
   React.useEffect(()=>{
-    try{localStorage.setItem(storeKey,JSON.stringify({checked:[...checked],extras,overrides}));}catch{}
-  },[checked,extras,overrides,storeKey]);
+    try{localStorage.setItem(storeKey,JSON.stringify({checked:[...checked],extras,overrides,extraPerson}));}catch{}
+  },[checked,extras,overrides,storeKey,extraPerson]);
 
   const baseList=useMemo(()=>buildShoppingList(userSlug,start,end),[userSlug,start,end]);
 
@@ -375,13 +381,17 @@ function ShoppingListModal({userSlug,initialDate,onClose}){
     setNewItem('');
   }
 
+  const totalFactor=extraPerson?1+extraPerson.factor:1;
+
   function buildText(){
-    return list.map(g=>
+    let txt=list.map(g=>
       `${g.category}:\n`+g.items.map(it=>{
-        const qty=overrides[it.key]??it.qty;
+        const qty=(overrides[it.key]??it.qty)*totalFactor;
         return `- ${labelFor(it.name,it.unit,qty)}`;
       }).join('\n')
     ).join('\n\n');
+    if(extraPerson) txt=`👥 Personen: jij${extraPerson.name?` + ${extraPerson.name}`:'+ 1'} (×${totalFactor})\n\n`+txt;
+    return txt;
   }
 
   function copy(){
@@ -417,6 +427,43 @@ function ShoppingListModal({userSlug,initialDate,onClose}){
             </div>
           </div>
 
+          {/* Extra persoon */}
+          <div className="border border-gray-100 rounded-xl overflow-hidden">
+            <button onClick={()=>setShowExtraPersonPanel(v=>!v)} className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50">
+              <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                👥 Extra persoon
+                {extraPerson&&<span className="text-xs font-normal text-orange-500">{extraPerson.name||'Ingeschakeld'} · ×{Math.round(totalFactor*10)/10}</span>}
+              </span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400"><path d={showExtraPersonPanel?'M18 15l-6-6-6 6':'M6 9l6 6 6-6'}/></svg>
+            </button>
+            {showExtraPersonPanel&&(
+              <div className="border-t border-gray-100 p-3 space-y-3 bg-gray-50">
+                <input value={extraPerson?.name||''} onChange={e=>setExtraPerson(p=>({...(p||{factor:1}),name:e.target.value}))}
+                  placeholder="Voor wie? (optioneel, bv. partner)" className="w-full border border-gray-200 bg-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"/>
+                <div className="space-y-1.5">
+                  {[
+                    {label:'Exact hetzelfde (volle portie)',factor:1.0},
+                    {label:'Iets minder — ¾ portie',factor:0.75},
+                    {label:'Halve portie',factor:0.5},
+                    {label:'Kind — ⅓ portie',factor:0.33},
+                  ].map(opt=>{
+                    const active=extraPerson&&Math.abs(extraPerson.factor-opt.factor)<0.01;
+                    return(
+                      <button key={opt.label} onClick={()=>setExtraPerson(p=>({name:p?.name||'',factor:opt.factor}))}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition-colors ${active?'border-orange-400 bg-orange-50 text-orange-700 font-medium':'border-gray-200 bg-white text-gray-700 hover:border-orange-300'}`}>
+                        {active&&<Icon name="CheckCircle2" size={13} className="inline mr-1.5 text-orange-500"/>}{opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-2">
+                  {extraPerson&&<button onClick={()=>{setExtraPerson(null);setShowExtraPersonPanel(false);}} className="flex-1 border border-red-100 text-red-500 hover:bg-red-50 rounded-lg py-2 text-xs font-medium">Verwijderen</button>}
+                  <button onClick={()=>setShowExtraPersonPanel(false)} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2 text-xs font-medium">Opslaan</button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {leeg ? (
             <p className="text-sm text-gray-400 text-center py-8">Geen voeding gelogd in dit bereik.</p>
           ) : (
@@ -447,7 +494,7 @@ function ShoppingListModal({userSlug,initialDate,onClose}){
                               <span className="text-xs text-gray-400 shrink-0">{it.unit==='st'?'st':it.unit}</span>
                             </div>
                           ):(
-                            <span className={`text-sm flex-1 min-w-0 ${on?'line-through text-gray-400':'text-gray-700'}`}>{labelFor(it.name,it.unit,qty)}</span>
+                            <span className={`text-sm flex-1 min-w-0 ${on?'line-through text-gray-400':'text-gray-700'}`}>{labelFor(it.name,it.unit,(overrides[it.key]??it.qty)*totalFactor)}</span>
                           )}
                           <button onClick={()=>isEditing?confirmEdit():startEdit(it.key,qty)}
                             className="shrink-0 text-gray-300 hover:text-blue-400 p-0.5 ml-auto">
@@ -659,25 +706,41 @@ function BarcodeScanner({ onDetected, onClose }) {
   );
 }
 
-// ─── AddFoodPanel ────────────────────────────────────────────────────────────
-function AddFoodPanel({pool,onAdd,onSaveCustom}){
+// ─── AddFoodOverlay ───────────────────────────────────────────────────────────
+function AddFoodOverlay({pool,onAdd,onSaveCustom,onClose,initialMeal,remaining}){
+  const [activeMeal,setActiveMeal]=useState(initialMeal||MEAL_TIMES[0].key);
+  const [tab,setTab]=useState('search');
+
+  // Search state
   const [query,setQuery]=useState('');
   const [staged,setStaged]=useState([]);
-  const [mode,setMode]=useState('search');
   const [offResults,setOffResults]=useState([]);
   const [offLoading,setOffLoading]=useState(false);
   const [offError,setOffError]=useState('');
   const [scanning,setScanning]=useState(false);
   const [barcodeMsg,setBarcodeMsg]=useState('');
   const [barcodeLoading,setBarcodeLoading]=useState(false);
-  const [description,setDescription]=useState('');
-  const [aiResult,setAiResult]=useState(null);
-  const [aiLoading,setAiLoading]=useState(false);
-  const [aiError,setAiError]=useState('');
+
+  // Manual state
   const emptyManual={name:'',kcal:'',protein:'',carbs:'',fat:''};
   const [manual,setManual]=useState(emptyManual);
   const [manualError,setManualError]=useState('');
   const [manualSaved,setManualSaved]=useState(false);
+
+  // AI estimate state
+  const [description,setDescription]=useState('');
+  const [aiResult,setAiResult]=useState(null);
+  const [aiLoading,setAiLoading]=useState(false);
+  const [aiError,setAiError]=useState('');
+
+  // AI suggestion state — pre-fill with remaining macros
+  const [sugKcal,setSugKcal]=useState(String(Math.round(remaining?.kcal||0)));
+  const [sugProtein,setSugProtein]=useState(String(Math.round(remaining?.protein||0)));
+  const [sugFat,setSugFat]=useState(String(Math.round(remaining?.fat||0)));
+  const [sugCarbs,setSugCarbs]=useState(String(Math.round(remaining?.carbs||0)));
+  const [sugLoading,setSugLoading]=useState(false);
+  const [suggestion,setSuggestion]=useState(null);
+  const [sugError,setSugError]=useState('');
 
   const results=useMemo(()=>{
     if(!query.trim())return[];
@@ -685,7 +748,6 @@ function AddFoodPanel({pool,onAdd,onSaveCustom}){
     return pool.filter(f=>f.name.toLowerCase().includes(q)).sort((a,b)=>a.name.toLowerCase().indexOf(q)-b.name.toLowerCase().indexOf(q)).slice(0,12);
   },[pool,query]);
 
-  // Open Food Facts online doorzoeken (debounced, min. 3 tekens)
   useEffect(()=>{
     const q=query.trim();
     if(q.length<3){setOffResults([]);setOffLoading(false);setOffError('');return;}
@@ -702,20 +764,24 @@ function AddFoodPanel({pool,onAdd,onSaveCustom}){
     setScanning(false);setBarcodeMsg('');setBarcodeLoading(true);
     try{
       const item=await lookupOffBarcode(code);
-      if(item){addToStaged(item);setMode('search');setBarcodeMsg(`✓ ${item.name} toegevoegd aan selectie — vul de grammen in.`);}
-      else setBarcodeMsg(`Barcode ${code} niet gevonden in Open Food Facts. Voeg het product handmatig toe via "Zelf ingeven".`);
+      if(item){addToStaged(item);setBarcodeMsg(`✓ ${item.name} toegevoegd${item.servingLabel?` — 1 portie = ${item.servingLabel}`:''}. Pas de hoeveelheid aan indien nodig.`);}
+      else setBarcodeMsg(`Barcode ${code} niet gevonden. Voeg het handmatig toe via "Zelf ingeven".`);
     }catch(e){setBarcodeMsg('Opzoeken mislukt: '+(e.message||''));}
     setBarcodeLoading(false);
   }
 
   const renderRow=(item)=>(
-    <button key={item.id} onClick={()=>addToStaged(item)} className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm flex justify-between items-center gap-2">
+    <button key={item.id} onClick={()=>addToStaged(item)} className="w-full text-left px-3 py-2.5 hover:bg-orange-50 text-sm flex justify-between items-center gap-2">
       <span className="text-gray-800 truncate">{item.name}</span>
-      <span className="text-xs text-gray-400 flex items-center gap-1 shrink-0">{Math.round(item.kcal)} kcal{item.perGram?'/100g':''} <Icon name="Plus" size={12}/></span>
+      <span className="text-xs text-gray-400 flex items-center gap-1 shrink-0">{Math.round(item.kcal)} kcal{item.perGram?'/100g':''} <Icon name="Plus" size={12} className="text-orange-400"/></span>
     </button>
   );
 
-  function addToStaged(item){setStaged(s=>[...s,{...item,stagedId:`s-${Date.now()}-${Math.random().toString(36).slice(2)}`,grams:item.perGram?100:null}]);setQuery('');}
+  function addToStaged(item){
+    const defaultGrams=item.servingQty||(item.perGram?100:null);
+    setStaged(s=>[...s,{...item,stagedId:`s-${Date.now()}-${Math.random().toString(36).slice(2)}`,grams:defaultGrams}]);
+    setQuery('');
+  }
   function updateGrams(id,g){setStaged(s=>s.map(it=>it.stagedId===id?{...it,grams:g}:it));}
   function removeStaged(id){setStaged(s=>s.filter(it=>it.stagedId!==id));}
 
@@ -724,7 +790,7 @@ function AddFoodPanel({pool,onAdd,onSaveCustom}){
       if(item.perGram){const g=parseFloat(item.grams)||0;return{id:`log-${Date.now()}-${Math.random()}`,name:item.name,grams:g,kcal:(item.kcal*g)/100,protein:(item.protein*g)/100,fat:(item.fat*g)/100,carbs:(item.carbs*g)/100,source:item.source||'nevo'};}
       return{id:`log-${Date.now()}-${Math.random()}`,name:item.name,grams:null,kcal:item.kcal,protein:item.protein,fat:item.fat,carbs:item.carbs,source:'custom',portionDescription:item.portionDescription};
     });
-    onAdd(entries);setStaged([]);
+    onAdd(entries,activeMeal);setStaged([]);onClose();
   }
 
   function handleManualSave(addToLog){
@@ -734,9 +800,8 @@ function AddFoodPanel({pool,onAdd,onSaveCustom}){
     if([kcal,protein,carbs,fat].some(isNaN)){setManualError('Vul alle waarden in als getal.');return;}
     const food={id:`custom-${Date.now()}`,name:manual.name.trim(),kcal,protein,carbs,fat,fiber:0,perGram:true,group:'Eigen voedingsmiddelen'};
     onSaveCustom(food);
-    if(addToLog){addToStaged(food);setMode('search');}
-    setManualSaved(true);setManual(emptyManual);
-    setTimeout(()=>setManualSaved(false),3000);
+    if(addToLog){addToStaged(food);setTab('search');setManual(emptyManual);}
+    else{setManualSaved(true);setManual(emptyManual);setTimeout(()=>setManualSaved(false),3000);}
   }
 
   async function handleAiEstimate(){
@@ -748,217 +813,254 @@ function AddFoodPanel({pool,onAdd,onSaveCustom}){
   }
 
   function addAiResult(alsoSave){
-    onAdd([{id:`log-${Date.now()}-${Math.random()}`,name:aiResult.name,grams:null,kcal:aiResult.kcal,protein:aiResult.protein,fat:aiResult.fat,carbs:aiResult.carbs,source:'ai',portionDescription:aiResult.portionDescription}]);
+    onAdd([{id:`log-${Date.now()}-${Math.random()}`,name:aiResult.name,grams:null,kcal:aiResult.kcal,protein:aiResult.protein,fat:aiResult.fat,carbs:aiResult.carbs,source:'ai',portionDescription:aiResult.portionDescription}],activeMeal);
     if(alsoSave)onSaveCustom({id:`custom-${Date.now()}`,name:aiResult.name,kcal:aiResult.kcal,protein:aiResult.protein,fat:aiResult.fat,carbs:aiResult.carbs,perGram:false,portionDescription:aiResult.portionDescription});
-    setAiResult(null);setDescription('');
+    onClose();
   }
-
-  return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-      {scanning&&<BarcodeScanner onDetected={handleBarcode} onClose={()=>setScanning(false)} />}
-      <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1">
-        {[{id:'search',label:'Zoeken'},{id:'manual',label:'Zelf ingeven'},{id:'describe',label:'AI-schatting'}].map(t=>(
-          <button key={t.id} onClick={()=>setMode(t.id)} className={`flex-1 py-1 rounded-md text-xs font-medium transition-colors ${mode===t.id?'bg-white shadow-sm text-gray-900':'text-gray-500'}`}>{t.label}</button>
-        ))}
-      </div>
-
-      {mode==='search'&&(
-        <div>
-          <div className="flex gap-2 mb-3">
-            <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[15px]"><Icon name="Search" size={15}/></span>
-              <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Zoek voedingsmiddel of merk..." className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
-            </div>
-            <button onClick={()=>{setBarcodeMsg('');setScanning(true);}} title="Scan barcode"
-              className="shrink-0 flex items-center gap-1.5 px-3 rounded-lg bg-[#2f8bff] hover:bg-[#2076e8] text-white text-xs font-medium">
-              <Icon name="Camera" size={15}/> Scan
-            </button>
-          </div>
-
-          {barcodeLoading&&<p className="text-xs text-gray-500 mb-2 flex items-center gap-1.5"><Icon name="Loader2" size={12}/> Barcode opzoeken…</p>}
-          {barcodeMsg&&<p className="text-xs mb-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-700">{barcodeMsg}</p>}
-
-          {query.trim()&&(
-            <div className="space-y-3 mb-3">
-              {results.length>0&&(
-                <div>
-                  <p className="text-[11px] font-medium text-gray-400 px-1 mb-1">NEVO &amp; eigen producten</p>
-                  <div className="border border-gray-100 rounded-lg divide-y divide-gray-50 max-h-52 overflow-y-auto">
-                    {results.map(renderRow)}
-                  </div>
-                </div>
-              )}
-              <div>
-                <p className="text-[11px] font-medium text-gray-400 px-1 mb-1 flex items-center gap-1.5">
-                  Merkproducten · Open Food Facts {offLoading&&<Icon name="Loader2" size={11}/>}
-                </p>
-                {offResults.length>0?(
-                  <div className="border border-gray-100 rounded-lg divide-y divide-gray-50 max-h-52 overflow-y-auto">
-                    {offResults.map(renderRow)}
-                  </div>
-                ):(
-                  query.trim().length<3
-                    ? <p className="text-xs text-gray-300 px-1">Typ minstens 3 tekens voor merkproducten…</p>
-                    : (!offLoading&&<p className="text-xs text-gray-300 px-1">{offError||'Geen merkproducten gevonden.'}</p>)
-                )}
-              </div>
-            </div>
-          )}
-          {staged.length>0&&(
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-gray-600">Geselecteerd — vul grammen in:</p>
-              {staged.map(item=>(
-                <div key={item.stagedId} className="border border-gray-100 rounded-lg p-2.5 flex items-center gap-2">
-                  <span className="text-sm text-gray-800 flex-1 truncate">{item.name}</span>
-                  {item.perGram?(<><input type="number" inputMode="decimal" value={item.grams} onChange={e=>updateGrams(item.stagedId,e.target.value)} className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm text-center" /><span className="text-xs text-gray-400">g</span></>):
-                  <span className="text-xs text-gray-400">vaste portie</span>}
-                  <button onClick={()=>removeStaged(item.stagedId)} className="text-gray-300 hover:text-red-500"><Icon name="X" size={14}/></button>
-                </div>
-              ))}
-              <button onClick={confirmAll} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-1.5 text-xs font-medium flex items-center justify-center gap-1 mt-2">
-                <Icon name="Plus" size={13}/> Toevoegen ({staged.length})
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {mode==='manual'&&(
-        <div className="space-y-3">
-          <p className="text-xs text-gray-500">Voedingswaarden <strong>per 100g</strong>. Wordt opgeslagen in je persoonlijke lijst.</p>
-          <div>
-            <label className="text-xs font-medium text-gray-600 block mb-1">Naam product</label>
-            <input value={manual.name} onChange={e=>{setManual(m=>({...m,name:e.target.value}));setManualError('');setManualSaved(false);}}
-              placeholder="Bv. Proteïnereep XYZ" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {[{key:'kcal',label:'Calorieën',unit:'kcal',color:'text-orange-500'},{key:'protein',label:'Eiwitten',unit:'g',color:'text-blue-600'},{key:'carbs',label:'Koolhydraten',unit:'g',color:'text-purple-600'},{key:'fat',label:'Vetten',unit:'g',color:'text-amber-600'}].map(({key,label,unit,color})=>(
-              <div key={key} className="bg-gray-50 rounded-xl p-3">
-                <label className={`text-[11px] font-semibold ${color} block mb-1`}>{label}</label>
-                <div className="flex items-center gap-1">
-                  <input type="number" inputMode="decimal" min="0" value={manual[key]} onChange={e=>{setManual(m=>({...m,[key]:e.target.value}));setManualError('');setManualSaved(false);}} placeholder="0"
-                    className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-orange-400" />
-                  <span className="text-xs text-gray-400 flex-shrink-0">{unit}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          {manualError&&<p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">{manualError}</p>}
-          {manualSaved&&<p className="text-xs text-orange-500 bg-orange-50 rounded-lg px-3 py-2">✓ Opgeslagen!</p>}
-          <div className="flex gap-2">
-            <button onClick={()=>handleManualSave(false)} className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl py-2.5 text-sm font-medium">Alleen opslaan</button>
-            <button onClick={()=>handleManualSave(true)} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-1.5">
-              <Icon name="Plus" size={14}/> Opslaan & toevoegen
-            </button>
-          </div>
-        </div>
-      )}
-
-      {mode==='describe'&&(
-        <div>
-          <textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="Bv. 150g kipfilet met rijst en broccoli" rows={2}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 mb-2 resize-none" />
-          <button onClick={handleAiEstimate} disabled={aiLoading||!description.trim()}
-            className="bg-[#2f8bff] hover:bg-[#2076e8] disabled:bg-gray-300 text-white rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5">
-            {aiLoading?<Icon name="Loader2" size={13}/>:<Icon name="Sparkles" size={13}/>}{aiLoading?'Schatten...':'Schat macro\'s'}
-          </button>
-          {aiError&&<p className="text-xs text-red-600 mt-2">{aiError}</p>}
-          {aiResult&&(
-            <div className="mt-3 border border-orange-100 bg-orange-50 rounded-lg p-3">
-              <p className="text-sm font-medium text-gray-800 mb-1">{aiResult.name}</p>
-              <p className="text-xs text-gray-500 mb-2">{aiResult.portionDescription}</p>
-              <p className="text-xs text-gray-600 mb-3">{Math.round(aiResult.kcal)} kcal · {Math.round(aiResult.protein)}g eiwit · {Math.round(aiResult.fat)}g vet · {Math.round(aiResult.carbs)}g KH</p>
-              <div className="flex gap-2">
-                <button onClick={()=>addAiResult(false)} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-1.5 text-xs font-medium">Toevoegen</button>
-                <button onClick={()=>addAiResult(true)} className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-lg py-1.5 text-xs font-medium">+ Opslaan</button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Maaltijdsuggestie ────────────────────────────────────────────────────────
-function MealSuggestionPanel({remaining,onAdd}){
-  const [mealTime,setMealTime]=useState(MEAL_TIMES[0].key);
-  const [kcal,setKcal]=useState(String(Math.round(remaining.kcal)));
-  const [protein,setProtein]=useState(String(Math.round(remaining.protein)));
-  const [fat,setFat]=useState(String(Math.round(remaining.fat)));
-  const [carbs,setCarbs]=useState(String(Math.round(remaining.carbs)));
-  const [loading,setLoading]=useState(false);
-  const [suggestion,setSuggestion]=useState(null);
-  const [error,setError]=useState('');
 
   async function handleSuggest(){
     const targets={};
-    if(kcal.trim())targets.kcal=parseFloat(kcal);
-    if(protein.trim())targets.protein=parseFloat(protein);
-    if(fat.trim())targets.fat=parseFloat(fat);
-    if(carbs.trim())targets.carbs=parseFloat(carbs);
-    if(Object.keys(targets).length===0){setError('Vul minstens één doelwaarde in.');return;}
-    setLoading(true);setError('');setSuggestion(null);
-    try{const lbl=MEAL_TIMES.find(m=>m.key===mealTime)?.label||'maaltijd';setSuggestion(await suggestMealWithAI(targets,lbl));}
-    catch(e){setError(e.message||'Kon geen suggestie maken.');}
-    setLoading(false);
+    if(sugKcal.trim())targets.kcal=parseFloat(sugKcal);
+    if(sugProtein.trim())targets.protein=parseFloat(sugProtein);
+    if(sugFat.trim())targets.fat=parseFloat(sugFat);
+    if(sugCarbs.trim())targets.carbs=parseFloat(sugCarbs);
+    if(Object.keys(targets).length===0){setSugError('Vul minstens één doelwaarde in.');return;}
+    setSugLoading(true);setSugError('');setSuggestion(null);
+    try{const lbl=MEAL_TIMES.find(m=>m.key===activeMeal)?.label||'maaltijd';setSuggestion(await suggestMealWithAI(targets,lbl));}
+    catch(e){setSugError(e.message||'Kon geen suggestie maken.');}
+    setSugLoading(false);
   }
 
   function addSuggestion(){
-    onAdd([{id:`log-${Date.now()}-${Math.random()}`,name:suggestion.title,grams:null,kcal:suggestion.kcal,protein:suggestion.protein,fat:suggestion.fat,carbs:suggestion.carbs,source:'ai',portionDescription:[(suggestion.ingredients||[]).join(', '),suggestion.description].filter(Boolean).join(' — ')}],mealTime);
-    setSuggestion(null);
+    onAdd([{id:`log-${Date.now()}-${Math.random()}`,name:suggestion.title,grams:null,kcal:suggestion.kcal,protein:suggestion.protein,fat:suggestion.fat,carbs:suggestion.carbs,source:'ai',portionDescription:[(suggestion.ingredients||[]).join(', '),suggestion.description].filter(Boolean).join(' — ')}],activeMeal);
+    onClose();
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-      <h2 className="text-sm font-semibold text-gray-900 mb-3">Stel een maaltijd voor</h2>
-      <div className="mb-3">
-        <label className="block text-xs font-medium text-gray-600 mb-1">Eetmoment</label>
-        <select value={mealTime} onChange={e=>setMealTime(e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
-          {MEAL_TIMES.map(m=><option key={m.key} value={m.key}>{m.label}</option>)}
-        </select>
+    <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
+      {scanning&&<BarcodeScanner onDetected={handleBarcode} onClose={()=>setScanning(false)} />}
+
+      {/* Header */}
+      <div className="bg-[#182a48] border-b border-[#2b3e60] px-4 flex items-center gap-3 h-14 shrink-0">
+        <button onClick={onClose} className="text-white/70 hover:text-white p-1 -ml-1"><Icon name="ArrowLeft" size={20}/></button>
+        <span className="font-logo text-base font-bold text-white tracking-wide flex-1">Voeg toe</span>
+        <span className="text-xs text-white/50">{MEAL_TIMES.find(m=>m.key===activeMeal)?.label}</span>
       </div>
-      <div className="grid grid-cols-4 gap-2 mb-2">
-        {[['Kcal',kcal,setKcal],['Eiwit',protein,setProtein],['Vet',fat,setFat],['KH',carbs,setCarbs]].map(([l,v,s])=>(
-          <div key={l}><label className="block text-xs font-medium text-gray-600 mb-1">{l}</label>
-            <input type="number" inputMode="decimal" value={v} onChange={e=>s(e.target.value)} className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-center" placeholder="-" /></div>
-        ))}
+
+      {/* Meal time selector */}
+      <div className="bg-white border-b border-gray-100 px-4 py-2 shrink-0 overflow-x-auto">
+        <MealTimeSelector active={activeMeal} onChange={setActiveMeal}/>
       </div>
-      <button onClick={handleSuggest} disabled={loading}
-        className="flex items-center gap-1.5 bg-[#2f8bff] hover:bg-[#2076e8] disabled:bg-gray-300 text-white rounded-lg px-3 py-1.5 text-xs font-medium">
-        {loading?<Icon name="Loader2" size={13}/>:<Icon name="Sparkles" size={13}/>}{loading?'Bezig...':'Genereer suggestie'}
-      </button>
-      {error&&<p className="text-xs text-red-600 mt-2">{error}</p>}
-      {suggestion&&(
-        <div className="border border-orange-100 bg-orange-50 rounded-lg p-3 mt-3">
-          <p className="text-sm font-medium text-gray-800 mb-1">{suggestion.title}</p>
-          {Array.isArray(suggestion.ingredients)&&suggestion.ingredients.length>0&&(
-            <ul className="text-xs text-gray-600 mb-2 list-disc list-inside space-y-0.5">
-              {suggestion.ingredients.map((ing,i)=><li key={i}>{ing}</li>)}
-            </ul>
-          )}
-          {suggestion.description&&<p className="text-xs text-gray-500 mb-2 italic">{suggestion.description}</p>}
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium mb-3">
-            <span className="text-orange-600">{Math.round(suggestion.kcal)} kcal</span>
-            <span className="text-blue-600">{Math.round(suggestion.protein)}g eiwit</span>
-            <span className="text-amber-600">{Math.round(suggestion.fat)}g vet</span>
-            <span className="text-purple-600">{Math.round(suggestion.carbs)}g KH</span>
-          </div>
-          <button onClick={addSuggestion} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-1.5 text-xs font-medium">
-            Toevoegen aan {MEAL_TIMES.find(m=>m.key===mealTime)?.label.toLowerCase()||'logboek'}
-          </button>
+
+      {/* Tabs */}
+      <div className="bg-white border-b border-gray-100 px-4 py-2 shrink-0">
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+          {[{id:'search',label:'Zoeken'},{id:'manual',label:'Zelf ingeven'},{id:'describe',label:'AI-schatting'},{id:'suggest',label:'AI Voorstel'}].map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} className={`flex-1 py-1 rounded-md text-xs font-medium transition-colors ${tab===t.id?'bg-white shadow-sm text-gray-900':'text-gray-500'}`}>{t.label}</button>
+          ))}
         </div>
-      )}
+      </div>
+
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+
+        {tab==='search'&&(
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><Icon name="Search" size={15}/></span>
+                <input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Zoek voedingsmiddel of merk..."
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white" />
+              </div>
+              <button onClick={()=>{setBarcodeMsg('');setScanning(true);}} title="Scan barcode"
+                className="shrink-0 flex items-center gap-1.5 px-3 rounded-xl bg-[#2f8bff] hover:bg-[#2076e8] text-white text-xs font-medium">
+                <Icon name="Camera" size={15}/> Scan
+              </button>
+            </div>
+            {barcodeLoading&&<p className="text-xs text-gray-500 flex items-center gap-1.5"><Icon name="Loader2" size={12}/> Barcode opzoeken…</p>}
+            {barcodeMsg&&<p className="text-xs px-3 py-2 rounded-xl bg-blue-50 text-blue-700">{barcodeMsg}</p>}
+            {query.trim()&&(
+              <div className="space-y-3">
+                {results.length>0&&(
+                  <div>
+                    <p className="text-[11px] font-medium text-gray-400 px-1 mb-1">NEVO &amp; eigen producten</p>
+                    <div className="bg-white border border-gray-100 rounded-xl divide-y divide-gray-50">
+                      {results.map(renderRow)}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 px-1 mb-1 flex items-center gap-1.5">
+                    Merkproducten · Open Food Facts {offLoading&&<Icon name="Loader2" size={11}/>}
+                  </p>
+                  {offResults.length>0?(
+                    <div className="bg-white border border-gray-100 rounded-xl divide-y divide-gray-50">
+                      {offResults.map(renderRow)}
+                    </div>
+                  ):(
+                    !offLoading&&<p className="text-xs text-gray-300 px-1">{query.trim().length<3?'Typ minstens 3 tekens voor merkproducten…':offError||'Geen merkproducten gevonden.'}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {staged.length>0&&(
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-600">Geselecteerd — vul grammen in:</p>
+                {staged.map(item=>(
+                  <div key={item.stagedId} className="bg-white border border-gray-100 rounded-xl p-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-800 flex-1 min-w-0 truncate">{item.name}</span>
+                      {item.perGram?(
+                        <div className="flex items-center gap-1 shrink-0">
+                          <input type="number" inputMode="decimal" value={item.grams} onChange={e=>updateGrams(item.stagedId,e.target.value)} className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm text-center"/>
+                          <span className="text-xs text-gray-400">g</span>
+                        </div>
+                      ):(
+                        <span className="text-xs text-gray-400 shrink-0">vaste portie</span>
+                      )}
+                      <button onClick={()=>removeStaged(item.stagedId)} className="text-gray-300 hover:text-red-500 shrink-0"><Icon name="X" size={14}/></button>
+                    </div>
+                    {item.servingLabel&&item.perGram&&(
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="text-[11px] text-gray-400">1 portie = {item.servingLabel}</span>
+                        {Number(item.grams)!==item.servingQty&&(
+                          <button onClick={()=>updateGrams(item.stagedId,item.servingQty)} className="text-[11px] text-orange-500 hover:text-orange-600 underline">Gebruik portie</button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <button onClick={confirmAll} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-3 text-sm font-semibold flex items-center justify-center gap-1.5">
+                  <Icon name="Plus" size={15}/> Toevoegen ({staged.length})
+                </button>
+              </div>
+            )}
+            {!query.trim()&&staged.length===0&&(
+              <p className="text-sm text-gray-300 text-center pt-8">Zoek een voedingsmiddel hierboven of scan een barcode.</p>
+            )}
+          </div>
+        )}
+
+        {tab==='manual'&&(
+          <div className="space-y-3">
+            <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
+              <p className="text-xs text-gray-500">Voedingswaarden <strong>per 100g</strong>. Wordt opgeslagen in je persoonlijke lijst.</p>
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">Naam product</label>
+                <input value={manual.name} onChange={e=>{setManual(m=>({...m,name:e.target.value}));setManualError('');setManualSaved(false);}}
+                  placeholder="Bv. Proteïnereep XYZ" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {[{key:'kcal',label:'Calorieën',unit:'kcal',color:'text-orange-500'},{key:'protein',label:'Eiwitten',unit:'g',color:'text-blue-600'},{key:'carbs',label:'Koolhydraten',unit:'g',color:'text-purple-600'},{key:'fat',label:'Vetten',unit:'g',color:'text-amber-600'}].map(({key,label,unit,color})=>(
+                  <div key={key} className="bg-gray-50 rounded-xl p-3">
+                    <label className={`text-[11px] font-semibold ${color} block mb-1`}>{label}</label>
+                    <div className="flex items-center gap-1">
+                      <input type="number" inputMode="decimal" min="0" value={manual[key]} onChange={e=>{setManual(m=>({...m,[key]:e.target.value}));setManualError('');setManualSaved(false);}} placeholder="0"
+                        className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                      <span className="text-xs text-gray-400 flex-shrink-0">{unit}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {manualError&&<p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">{manualError}</p>}
+              {manualSaved&&<p className="text-xs text-orange-500 bg-orange-50 rounded-lg px-3 py-2">✓ Opgeslagen in je productenlijst!</p>}
+              <div className="flex gap-2 pt-1">
+                <button onClick={()=>handleManualSave(false)} className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl py-2.5 text-sm font-medium">Alleen opslaan</button>
+                <button onClick={()=>handleManualSave(true)} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-1.5">
+                  <Icon name="Plus" size={14}/> Opslaan & toevoegen
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab==='describe'&&(
+          <div className="space-y-3">
+            <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
+              <p className="text-xs text-gray-500">Beschrijf wat je hebt gegeten en AI schat de macro's.</p>
+              <textarea value={description} onChange={e=>setDescription(e.target.value)}
+                placeholder="Bv. 150g kipfilet met rijst en broccoli" rows={3}
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none" />
+              <button onClick={handleAiEstimate} disabled={aiLoading||!description.trim()}
+                className="w-full bg-[#2f8bff] hover:bg-[#2076e8] disabled:bg-gray-300 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+                {aiLoading?<Icon name="Loader2" size={14}/>:<Icon name="Sparkles" size={14}/>}{aiLoading?'Schatten...':'Schat macro\'s'}
+              </button>
+              {aiError&&<p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{aiError}</p>}
+              {aiResult&&(
+                <div className="border border-orange-100 bg-orange-50 rounded-xl p-3 space-y-2">
+                  <p className="text-sm font-semibold text-gray-800">{aiResult.name}</p>
+                  {aiResult.portionDescription&&<p className="text-xs text-gray-500">{aiResult.portionDescription}</p>}
+                  <p className="text-xs text-gray-600">{Math.round(aiResult.kcal)} kcal · {Math.round(aiResult.protein)}g eiwit · {Math.round(aiResult.fat)}g vet · {Math.round(aiResult.carbs)}g KH</p>
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={()=>addAiResult(false)} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2 text-xs font-medium">Toevoegen</button>
+                    <button onClick={()=>addAiResult(true)} className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-lg py-2 text-xs font-medium">+ Opslaan</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {tab==='suggest'&&(
+          <div className="space-y-3">
+            <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-800 mb-0.5">AI Maaltijdvoorstel</p>
+                <p className="text-xs text-gray-500">Ingevuld op basis van wat je vandaag nog nodig hebt. Pas aan indien gewenst.</p>
+              </div>
+              {remaining&&(
+                <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-700">
+                  Nog nodig vandaag: <strong>{Math.round(remaining.kcal)} kcal</strong> · {Math.round(remaining.protein)}g eiwit · {Math.round(remaining.fat)}g vet · {Math.round(remaining.carbs)}g KH
+                </div>
+              )}
+              <div className="grid grid-cols-4 gap-2">
+                {[['Kcal',sugKcal,setSugKcal,'text-orange-500'],['Eiwit',sugProtein,setSugProtein,'text-blue-600'],['Vet',sugFat,setSugFat,'text-amber-600'],['KH',sugCarbs,setSugCarbs,'text-purple-600']].map(([l,v,s,c])=>(
+                  <div key={l} className="bg-gray-50 rounded-xl p-2.5">
+                    <label className={`block text-[10px] font-semibold ${c} mb-1`}>{l}</label>
+                    <input type="number" inputMode="decimal" value={v} onChange={e=>s(e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 bg-white px-1 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="-"/>
+                  </div>
+                ))}
+              </div>
+              <button onClick={handleSuggest} disabled={sugLoading}
+                className="w-full bg-[#2f8bff] hover:bg-[#2076e8] disabled:bg-gray-300 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+                {sugLoading?<Icon name="Loader2" size={14}/>:<Icon name="Sparkles" size={14}/>}{sugLoading?'Bezig...':'Genereer voorstel'}
+              </button>
+              {sugError&&<p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{sugError}</p>}
+              {suggestion&&(
+                <div className="border border-orange-100 bg-orange-50 rounded-xl p-3 space-y-2">
+                  <p className="text-sm font-semibold text-gray-800">{suggestion.title}</p>
+                  {Array.isArray(suggestion.ingredients)&&suggestion.ingredients.length>0&&(
+                    <ul className="text-xs text-gray-600 list-disc list-inside space-y-0.5">
+                      {suggestion.ingredients.map((ing,i)=><li key={i}>{ing}</li>)}
+                    </ul>
+                  )}
+                  {suggestion.description&&<p className="text-xs text-gray-500 italic">{suggestion.description}</p>}
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium">
+                    <span className="text-orange-600">{Math.round(suggestion.kcal)} kcal</span>
+                    <span className="text-blue-600">{Math.round(suggestion.protein)}g eiwit</span>
+                    <span className="text-amber-600">{Math.round(suggestion.fat)}g vet</span>
+                    <span className="text-purple-600">{Math.round(suggestion.carbs)}g KH</span>
+                  </div>
+                  <button onClick={addSuggestion} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2 text-xs font-medium">
+                    Toevoegen aan {MEAL_TIMES.find(m=>m.key===activeMeal)?.label.toLowerCase()||'logboek'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 // ─── DailyLogList ─────────────────────────────────────────────────────────────
-function DailyLogList({log,onRemove}){
+function DailyLogList({log,onRemove,onOpenAdd}){
   const grouped=useMemo(()=>groupByMeal(log),[log]);
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-      <h2 className="text-sm font-semibold text-gray-900 mb-3">Vandaag gelogd</h2>
+      <h2 className="text-sm font-semibold text-gray-900 mb-3">Dagboek</h2>
       <div className="space-y-4">
         {MEAL_TIMES.map(meal=>{
           const entries=grouped[meal.key];
@@ -967,7 +1069,12 @@ function DailyLogList({log,onRemove}){
             <div key={meal.key}>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-semibold text-gray-700">{meal.label}</span>
-                {entries.length>0&&<span className="text-xs text-gray-400">{Math.round(sub.kcal)} kcal · {Math.round(sub.protein)}g E</span>}
+                <div className="flex items-center gap-2">
+                  {entries.length>0&&<span className="text-xs text-gray-400">{Math.round(sub.kcal)} kcal · {Math.round(sub.protein)}g E</span>}
+                  <button onClick={()=>onOpenAdd(meal.key)} className="w-6 h-6 rounded-full bg-orange-50 hover:bg-orange-100 text-orange-400 hover:text-orange-600 flex items-center justify-center transition-colors" title={`Toevoegen aan ${meal.label}`}>
+                    <Icon name="Plus" size={13}/>
+                  </button>
+                </div>
               </div>
               {entries.length===0?<p className="text-xs text-gray-300 pl-1">Nog niets gelogd</p>:
                 <div className="space-y-1.5 pl-1">
