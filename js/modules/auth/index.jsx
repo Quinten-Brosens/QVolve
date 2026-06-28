@@ -1,4 +1,41 @@
-// ─── Admin Paneel ────────────────────────────────────────────────────────────
+// ─── modules/auth — gebruikersbeheer, sessie, login UI ───────────────────────
+const DEFAULT_PASSWORD = "Qvolve123!";
+const ADMIN_PASSWORD   = "QvolveAdmin!";
+const USERS_KEY        = "qvolve-users-v2";
+const SESSION_KEY      = "qvolve-session";
+const SESSION_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+
+const DEFAULT_USERS = [
+  { name: "Alvin Broers",        password: DEFAULT_PASSWORD, mustChangePw: true },
+  { name: "Anthony Van Goethem", password: DEFAULT_PASSWORD, mustChangePw: true },
+  { name: "Quinten Brosens",     password: DEFAULT_PASSWORD, mustChangePw: true },
+  { name: "Hanne Nelen",         password: DEFAULT_PASSWORD, mustChangePw: true },
+];
+
+function loadUsers() {
+  const stored = lsGet(USERS_KEY);
+  if (!stored || !Array.isArray(stored)) { lsSet(USERS_KEY, DEFAULT_USERS); return DEFAULT_USERS; }
+  let updated = [...stored]; let changed = false;
+  for (const def of DEFAULT_USERS) {
+    if (!updated.find(u => u.name.toLowerCase() === def.name.toLowerCase())) { updated.push(def); changed = true; }
+  }
+  if (changed) lsSet(USERS_KEY, updated);
+  return updated;
+}
+function saveUsers(users) { lsSet(USERS_KEY, users); }
+
+function loadSession() {
+  const s = lsGet(SESSION_KEY);
+  if (!s || !s.name || !s.ts) return null;
+  if (Date.now() - s.ts > SESSION_MAX_AGE_MS) { lsDel(SESSION_KEY); return null; }
+  const u = loadUsers().find(u => u.name === s.name && !u.mustChangePw);
+  if (!u) { lsDel(SESSION_KEY); return null; }
+  return s.name;
+}
+function saveSession(name) { lsSet(SESSION_KEY, { name, ts: Date.now() }); }
+function clearSession() { lsDel(SESSION_KEY); }
+
+// ─── Admin paneel ─────────────────────────────────────────────────────────────
 function AdminPanel({ onClose }) {
   const [users, setUsers] = useState(loadUsers());
   const [newName, setNewName] = useState('');
@@ -11,12 +48,12 @@ function AdminPanel({ onClose }) {
     saveUsers(updated); setUsers(updated); setNewName(''); setMsg(`✓ ${newName.trim()} toegevoegd`);
   }
   function handleReset(name) {
-    const updated = users.map(u => u.name===name ? {...u, password:DEFAULT_PASSWORD, mustChangePw:true} : u);
+    const updated = users.map(u => u.name === name ? { ...u, password: DEFAULT_PASSWORD, mustChangePw: true } : u);
     saveUsers(updated); setUsers(updated); setMsg(`✓ Wachtwoord van ${name} gereset`);
   }
   function handleDelete(name) {
     if (!window.confirm(`${name} verwijderen?`)) return;
-    const updated = users.filter(u => u.name!==name);
+    const updated = users.filter(u => u.name !== name);
     saveUsers(updated); setUsers(updated); setMsg(`✓ ${name} verwijderd`);
   }
 
@@ -46,7 +83,7 @@ function AdminPanel({ onClose }) {
           <div className="border-t border-[#2b3e60] pt-4">
             <p className="text-xs text-blue-400 mb-2 font-medium">Gebruiker toevoegen</p>
             <div className="flex gap-2">
-              <input value={newName} onChange={e=>{setNewName(e.target.value);setMsg('');}} onKeyDown={e=>e.key==='Enter'&&handleAdd()} placeholder="Volledige naam"
+              <input value={newName} onChange={e => { setNewName(e.target.value); setMsg(''); }} onKeyDown={e => e.key === 'Enter' && handleAdd()} placeholder="Volledige naam"
                 className="flex-1 bg-[#24375a] border border-[#2b3e60] rounded-xl text-white text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-orange-500 placeholder-blue-500" />
               <button onClick={handleAdd} className="bg-orange-500 hover:bg-orange-400 text-white rounded-xl px-4 py-2.5 text-sm font-semibold"><Icon name="Plus" size={14}/></button>
             </div>
@@ -60,23 +97,20 @@ function AdminPanel({ onClose }) {
 
 // ─── Wachtwoord wijzigen ──────────────────────────────────────────────────────
 function ChangePwScreen({ userName, onDone }) {
-  const [pw1,setPw1]=useState(''); const [pw2,setPw2]=useState('');
-  const [show,setShow]=useState(false); const [err,setErr]=useState(''); const [saving,setSaving]=useState(false);
+  const [pw1, setPw1] = useState(''); const [pw2, setPw2] = useState('');
+  const [show, setShow] = useState(false); const [err, setErr] = useState(''); const [saving, setSaving] = useState(false);
 
   function handleSave() {
-    if (pw1.length<8) { setErr('Minimaal 8 tekens.'); return; }
-    if (pw1!==pw2) { setErr('Wachtwoorden komen niet overeen.'); return; }
-    if (pw1===DEFAULT_PASSWORD) { setErr('Kies een ander wachtwoord dan het standaard.'); return; }
+    if (pw1.length < 8) { setErr('Minimaal 8 tekens.'); return; }
+    if (pw1 !== pw2) { setErr('Wachtwoorden komen niet overeen.'); return; }
+    if (pw1 === DEFAULT_PASSWORD) { setErr('Kies een ander wachtwoord dan het standaard.'); return; }
     setSaving(true);
-    const users = loadUsers();
-    const updated = users.map(u => u.name===userName ? {...u,password:pw1,mustChangePw:false} : u);
-    saveUsers(updated);
-    setSaving(false);
-    onDone();
+    const updated = loadUsers().map(u => u.name === userName ? { ...u, password: pw1, mustChangePw: false } : u);
+    saveUsers(updated); setSaving(false); onDone();
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{background:'radial-gradient(ellipse at top, #26395f 0%, #14223c 65%)'}}>
+    <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ background: 'radial-gradient(ellipse at top, #26395f 0%, #14223c 65%)' }}>
       <div className="mb-6 text-center">
         <img src="logo-qvolve.png" alt="Qvolve" className="w-28 h-28 mx-auto rounded-2xl shadow-xl shadow-black/40" />
       </div>
@@ -85,18 +119,17 @@ function ChangePwScreen({ userName, onDone }) {
         <p className="text-xs text-blue-400 mb-4">Welkom {userName.split(' ')[0]}! Kies een persoonlijk wachtwoord.</p>
         <div className="space-y-3">
           <div className="relative">
-            <input type={show?'text':'password'} value={pw1} onChange={e=>{setPw1(e.target.value);setErr('');}} placeholder="Nieuw wachtwoord"
+            <input type={show ? 'text' : 'password'} value={pw1} onChange={e => { setPw1(e.target.value); setErr(''); }} placeholder="Nieuw wachtwoord"
               className="w-full bg-[#24375a] border border-[#2b3e60] rounded-xl text-white placeholder-blue-500 px-4 py-3 pr-16 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-            <button type="button" onClick={()=>setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400 text-[11px]">{show?'verberg':'toon'}</button>
+            <button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400 text-[11px]">{show ? 'verberg' : 'toon'}</button>
           </div>
-          <input type={show?'text':'password'} value={pw2} onChange={e=>{setPw2(e.target.value);setErr('');}} placeholder="Bevestig wachtwoord"
-            onKeyDown={e=>e.key==='Enter'&&handleSave()}
+          <input type={show ? 'text' : 'password'} value={pw2} onChange={e => { setPw2(e.target.value); setErr(''); }} placeholder="Bevestig wachtwoord"
+            onKeyDown={e => e.key === 'Enter' && handleSave()}
             className="w-full bg-[#24375a] border border-[#2b3e60] rounded-xl text-white placeholder-blue-500 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
           {err && <p className="text-xs text-red-400 bg-red-950/50 rounded-lg px-3 py-2">{err}</p>}
           <button onClick={handleSave} disabled={saving}
             className="w-full bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-white rounded-xl py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2">
-            {saving && <Icon name="Loader2" size={14}/>}
-            Opslaan en starten
+            {saving && <Icon name="Loader2" size={14}/>} Opslaan en starten
           </button>
         </div>
       </div>
@@ -118,13 +151,13 @@ function AccessGate({ onUnlock }) {
   const [changePw, setChangePw] = useState(null);
 
   function handleLogin() {
-    const u = loadUsers().find(u => u.name===selName && u.password===password.trim());
+    const u = loadUsers().find(u => u.name === selName && u.password === password.trim());
     if (!u) { setError('Foutieve naam of wachtwoord.'); return; }
     if (u.mustChangePw) { setChangePw(u.name); return; }
     onUnlock(u.name);
   }
   function handleAdminLogin() {
-    if (adminPw===ADMIN_PASSWORD) { setAdminOpen(true); setShowAdmin(false); setAdminPw(''); setAdminErr(''); }
+    if (adminPw === ADMIN_PASSWORD) { setAdminOpen(true); setShowAdmin(false); setAdminPw(''); setAdminErr(''); }
     else setAdminErr('Fout admin-wachtwoord.');
   }
 
@@ -133,7 +166,7 @@ function AccessGate({ onUnlock }) {
   return (
     <>
       {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} />}
-      <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{background:'radial-gradient(ellipse at top, #26395f 0%, #14223c 65%)'}}>
+      <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ background: 'radial-gradient(ellipse at top, #26395f 0%, #14223c 65%)' }}>
         <div className="mb-8 text-center">
           <img src="logo-qvolve.png" alt="Qvolve" className="w-44 h-44 mx-auto rounded-3xl shadow-2xl shadow-black/50" />
         </div>
@@ -145,9 +178,8 @@ function AccessGate({ onUnlock }) {
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-blue-400 mb-1">Naam</label>
-              <select value={selName} onChange={e=>{setSelName(e.target.value);setError('');}}
-                className="w-full bg-[#24375a] border border-[#2b3e60] rounded-xl text-sm px-4 py-3 focus:outline-none focus:ring-2 focus:ring-orange-500 appearance-none text-white"
-                style={{colorScheme:'dark'}}>
+              <select value={selName} onChange={e => { setSelName(e.target.value); setError(''); }}
+                className="w-full bg-[#24375a] border border-[#2b3e60] rounded-xl text-sm px-4 py-3 focus:outline-none focus:ring-2 focus:ring-orange-500 appearance-none text-white" style={{ colorScheme: 'dark' }}>
                 <option value="">— Selecteer je naam —</option>
                 {users.map(u => <option key={u.name} value={u.name}>{u.name}</option>)}
               </select>
@@ -155,26 +187,26 @@ function AccessGate({ onUnlock }) {
             <div>
               <label className="block text-xs font-medium text-blue-400 mb-1">Wachtwoord</label>
               <div className="relative">
-                <input type={showPw?'text':'password'} value={password} onChange={e=>{setPassword(e.target.value);setError('');}}
-                  onKeyDown={e=>e.key==='Enter'&&handleLogin()} placeholder="••••••••••"
+                <input type={showPw ? 'text' : 'password'} value={password} onChange={e => { setPassword(e.target.value); setError(''); }}
+                  onKeyDown={e => e.key === 'Enter' && handleLogin()} placeholder="••••••••••"
                   className="w-full rounded-xl bg-[#24375a] border border-[#2b3e60] text-white placeholder-blue-500 px-4 py-3 pr-14 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                <button type="button" onClick={()=>setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400 text-[11px]">{showPw?'verberg':'toon'}</button>
+                <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400 text-[11px]">{showPw ? 'verberg' : 'toon'}</button>
               </div>
             </div>
             {error && <p className="text-xs text-red-400 bg-red-950/50 rounded-lg px-3 py-2">{error}</p>}
-            <button onClick={handleLogin} disabled={!selName||!password}
+            <button onClick={handleLogin} disabled={!selName || !password}
               className="w-full bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white rounded-xl py-3 text-sm font-semibold transition-colors">
               Start →
             </button>
           </div>
         </div>
-        <button onClick={()=>setShowAdmin(!showAdmin)} className="mt-6 text-[11px] text-blue-700 hover:text-blue-500">Beheer</button>
+        <button onClick={() => setShowAdmin(!showAdmin)} className="mt-6 text-[11px] text-blue-700 hover:text-blue-500">Beheer</button>
         {showAdmin && (
           <div className="mt-3 w-full max-w-xs bg-[#182a48] border border-[#2b3e60] rounded-xl p-4">
             <p className="text-xs text-blue-400 mb-2">Admin-wachtwoord</p>
             <div className="flex gap-2">
-              <input type="password" value={adminPw} onChange={e=>{setAdminPw(e.target.value);setAdminErr('');}}
-                onKeyDown={e=>e.key==='Enter'&&handleAdminLogin()} placeholder="••••••"
+              <input type="password" value={adminPw} onChange={e => { setAdminPw(e.target.value); setAdminErr(''); }}
+                onKeyDown={e => e.key === 'Enter' && handleAdminLogin()} placeholder="••••••"
                 className="flex-1 bg-[#24375a] border border-[#2b3e60] rounded-lg text-white text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500" />
               <button onClick={handleAdminLogin} className="bg-orange-500 text-white rounded-lg px-3 py-2 text-sm">→</button>
             </div>
@@ -185,4 +217,3 @@ function AccessGate({ onUnlock }) {
     </>
   );
 }
-
