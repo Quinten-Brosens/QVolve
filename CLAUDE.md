@@ -18,21 +18,72 @@ Slogan: **Train. Fuel. Recover. Evolve.**
 - **Belangrijk:** de front-end blijft werken zonder build-proces. Introduceer geen
   bundler, geen npm-build en geen `import`/`export` in de browser-scripts. Losse
   JS-bestanden laad je via `<script>`-tags, niet via ES-modules.
+- Alle variabelen zijn globaal — laadvolgorde in `qvolve.html` bepaalt wat
+  beschikbaar is. Modules mogen alleen globals gebruiken die eerder geladen zijn.
 - Test na elke grote wijziging of de app nog laadt vóór je ze als af beschouwt.
 
-## Bestanden
+## Bestandsstructuur
 
-- `qvolve.html` — de volledige app (wordt opgesplitst voor onderhoudbaarheid).
-- `manifest.json` — PWA-manifest (naam, kleuren, icon-verwijzingen).
-- `sw.js` — service worker. **Network-first voor HTML én app-code** (`.html`/`.js`/
-  `.jsx`) zodat updates meteen doorkomen; cache-first voor iconen/manifest.
-  Cacheversie staat in `CACHE` (nu `qvolve-v4`). Bump die versie bij grote wijzigingen.
-- `icon-192.png`, `icon-512.png` — PWA-iconen, gegenereerd uit `logo-qvolve.png`.
-- `logo-qvolve.png` — het logo (Q-merkteken + wordmark + slogan), bron voor de stijl.
-- `vercel.json` — Vercel-config (rewrite root → `qvolve.html`).
-- `api/gemini.js` — serverless proxy naar Gemini (zie AI-functies).
-- `api/off-search.js` — serverless proxy naar de Open Food Facts-zoekdienst
-  (zie Voeding-tab). Barcode-lookups gaan rechtstreeks vanuit de client.
+```
+qvolve.html           — entry-point; laadt alle scripts in volgorde
+manifest.json         — PWA-manifest
+sw.js                 — service worker (network-first voor html/js/jsx)
+vercel.json           — rewrite root → qvolve.html
+api/
+  gemini.js           — serverless proxy naar Gemini (GEMINI_API_KEY env-var)
+  off-search.js       — serverless proxy naar Open Food Facts tekstzoeken
+data/
+  nevo-data.js        — NEVO_DATA array, 2328 items (geladen vóór alle jsx)
+js/
+  lib/
+    utils.jsx         — lsGet/lsSet/lsDel, datum-helpers, normalizeMealTime,
+                        groupByMeal, loadScript, humanizeCamError, React destructuring
+    macros.jsx        — MEAL_TIMES, ACTIVITY_FACTORS, GOALS, MACRO_PROFILES,
+                        calcBMR, calcMacros, applyKcalToMacros, NEVO_VERSION
+    ai.jsx            — callGemini, parseJsonFromAI, estimateFoodWithAI,
+                        suggestMealWithAI
+    off.jsx           — mapOffProduct, offListToFoods, searchOpenFoodFacts,
+                        lookupOffBarcode
+    icons.jsx         — icons{} map + Icon({name,size,className}) component
+  modules/
+    auth/
+      index.jsx       — DEFAULT_USERS, loadUsers/saveUsers, loadSession/saveSession,
+                        AdminPanel, ChangePwScreen, AccessGate
+    onboarding/
+      index.jsx       — SetupWizard (profiel invullen, macro's berekenen)
+    dashboard/
+      index.jsx       — CalorieSummary, MacroRing, MacroBreakdownModal,
+                        DateNav, KcalAdjuster, MealTimeSelector
+    voeding/
+      index.jsx       — BarcodeScanner, AddFoodOverlay (4 tabs: zoeken/manueel/
+                        AI-schatting/AI-voorstel), DailyLogList, RepeatDayModal
+    boodschappenlijst/
+      index.jsx       — SHOP_CATEGORIES, SHOP_KEYWORDS, SYNONYMS, stemNL,
+                        categorizeIngredient, parseIngredient, labelFor,
+                        buildShoppingList, ShoppingListModal
+    weekschema/
+      index.jsx       — VRAGENLIJST, buildSchemaPrompt, VragenlijstStap,
+                        printWeekSchema, ImportSchemaModal, WeekSchemaPanel
+    training/
+      index.jsx       — TrainingPlaceholder (nog uit te bouwen)
+  app.jsx             — App root: state, routing tussen tabs, FAB-knop
+```
+
+### Laadvolgorde in qvolve.html (volgorde is cruciaal)
+1. `data/nevo-data.js` (plain JS, geen Babel)
+2. `js/lib/utils.jsx`
+3. `js/lib/macros.jsx`
+4. `js/lib/ai.jsx`
+5. `js/lib/off.jsx`
+6. `js/lib/icons.jsx`
+7. `js/modules/auth/index.jsx`
+8. `js/modules/onboarding/index.jsx`
+9. `js/modules/dashboard/index.jsx`
+10. `js/modules/voeding/index.jsx`
+11. `js/modules/boodschappenlijst/index.jsx`
+12. `js/modules/weekschema/index.jsx`
+13. `js/modules/training/index.jsx`
+14. `js/app.jsx`
 
 ## Kleurenschema
 
@@ -63,8 +114,8 @@ blauw + oranje accenten.
   De header-methode werkt met de nieuwe Google-sleutels die met `AQ.` beginnen.
 - **Eén gedeelde sleutel via een serverless proxy.** Gebruikers stellen niets meer
   in. De browser roept `/api/gemini` aan (Vercel-functie in `api/gemini.js`); die
-  voegt de sleutel server-side toe en praat met Google. `callGemini()` in `lib.jsx`
-  POST't enkel `{ prompt, maxTokens }` naar die proxy.
+  voegt de sleutel server-side toe en praat met Google. `callGemini()` in
+  `js/lib/ai.jsx` POST't enkel `{ prompt, maxTokens }` naar die proxy.
 - **De sleutel staat als environment-variabele op Vercel** (`GEMINI_API_KEY`),
   nooit in de client of in de repo. Google deactiveert sleutels die publiek op
   GitHub of in client-code belanden. Optioneel `ALLOWED_ORIGINS` (komma-gescheiden)
@@ -75,8 +126,8 @@ blauw + oranje accenten.
 ## Gebruikers & opslag
 
 - Geen centrale database. Alles in `localStorage`, per apparaat.
-- Standaardgebruikers (in `DEFAULT_USERS`): Alvin Broers, Anthony Van Goethem,
-  Quinten Brosens, Hanne Nelen.
+- Standaardgebruikers (in `DEFAULT_USERS` in `js/modules/auth/index.jsx`):
+  Alvin Broers, Anthony Van Goethem, Quinten Brosens, Hanne Nelen.
 - `loadUsers()` voegt nieuwe namen uit `DEFAULT_USERS` automatisch toe aan een
   bestaande lokale lijst — zo verschijnen nieuwe gebruikers ook op toestellen die
   de app al kenden.
@@ -95,44 +146,60 @@ blauw + oranje accenten.
 - `custom-foods:{slug}` — eigen voedingsmiddelen
 - `weekschema-prefs:{slug}` — antwoorden vragenlijst
 - `weekschema-plan:{slug}` — gegenereerd weekschema
+- `shop-state:{slug}:{start}:{end}` — boodschappenlijst staat (afgevinkt, extra's)
 
 (`slug` = naam via `slugifyName()`, bv. "quinten-brosens".)
 
-## Functionaliteit
+## Functionaliteit per module
 
-- **Voeding-tab:** NEVO-databank doorzoeken (2328 items, ingebakken als
-  `NEVO_DATA`), eigen producten, handmatige invoer, dagtotaal met macrobalken,
-  caloriedoel aanpasbaar, datumnavigatie, 6 eetmomenten, daglogboek per maaltijd.
-- **Plannen (Voeding-tab):** knoppen bij de datumnavigatie. "Boodschappenlijst"
-  aggregeert de gelogde voeding over een datumbereik (van/tot, grammen opgeteld per
-  product, gegroepeerd per voedingsgroep, met kopieerknop). "Dag herhalen" kopieert
-  de huidige dag naar gekozen weekdagen (aanvinkbaar Ma–Zo) voor X komende weken
-  (overschrijft die dagen).
-- **Open Food Facts (merkproducten + barcode):** gefedereerd zoeken — NEVO/eigen
-  producten lokaal en instant, OFF-merkproducten online erbovenop (debounced, min.
-  3 tekens). OFF-tekstzoeken loopt via `/api/off-search` (proxy, met fallback naar
-  het legacy CORS-endpoint als de proxy ontbreekt). Barcode scannen via camera
-  (`html5-qrcode`, lazy van CDN) → `lookupOffBarcode()` rechtstreeks op de v2-API.
-  OFF-producten worden door `mapOffProduct()` op het NEVO-formaat gemapt (per 100g).
-- **Weekplan-tab:** 11-stappen vragenlijst → Gemini genereert 7-daags menu met
-  ingrediënten, hoeveelheden, tips, macros en boodschappenlijst. **Importeren**
-  vraagt een startdatum (gesnapt naar de maandag van die week) + aantal weken;
-  het schema wordt **weekdag-uitgelijnd** geladen (Maandag→maandag, …), voor X
-  weken, en overschrijft die dagen. Maaltijdtijden worden via `normalizeMealTime()`
-  op de juiste eetmoment-keys gezet (snacks belanden niet meer onder ontbijt) en
-  de **ingrediënten** worden mee in het logboek opgenomen. **Afdrukken** opent een
-  printvenster met het volledige schema + boodschappenlijst (`printWeekSchema()`).
-  Datum-/maaltijdhelpers (`mondayOf`, `DAG_OFFSET`, `normalizeMealTime`) staan in
-  `lib.jsx`.
-- **Training-tab:** nu nog een placeholder. Nog uit te bouwen.
-- Macroberekening: Harris-Benedict BMR × activiteitsfactor, met FitChef-,
-  percentage- en keto-profielen.
+### dashboard (`js/modules/dashboard/index.jsx`)
+CalorieSummary (balk + tekst), MacroRing (SVG-donut, toont `gegeten/doel g`),
+MacroBreakdownModal (taartdiagram + top-5 per macro), DateNav, KcalAdjuster,
+MealTimeSelector.
+
+### voeding (`js/modules/voeding/index.jsx`)
+- **AddFoodOverlay**: fullscreen overlay met 4 tabs:
+  - *Zoeken* — NEVO + eigen producten (instant) + Open Food Facts (debounced)
+    + barcodescan (`html5-qrcode`, lazy van CDN)
+  - *Zelf ingeven* — handmatige invoer per 100g, opslaan in eigen lijst
+  - *AI-schatting* — vrije tekstbeschrijving → Gemini schat macro's
+  - *AI Voorstel* — doel-macro's (standaard = resterend voor die dag) →
+    Gemini stelt een maaltijd voor
+- **DailyLogList**: dagboek gegroepeerd per eetmoment, + knop per maaltijd
+- **RepeatDayModal**: huidige dag kopiëren naar weekdagen voor X weken
+- **BarcodeScanner**: camera-overlay via html5-qrcode
+
+### boodschappenlijst (`js/modules/boodschappenlijst/index.jsx`)
+Aggregeert gelogde voeding over datumbereik. Groepeert per supermarkt-categorie
+(NEVO-groep → NEVO_TO_SHOP, losse ingrediënten → SHOP_KEYWORDS + stemNL).
+Functies: normalizeIngredientName, shouldDropIngredient, categorizeIngredient,
+parseIngredient (qty+unit+name), labelFor (kg/l boven 1000).
+ShoppingListModal: afvinken, hoeveelheid aanpassen, handmatig toevoegen,
+extra persoon (factor 0.33–1.0), kopiëren, WhatsApp delen.
+
+### weekschema (`js/modules/weekschema/index.jsx`)
+10-staps VRAGENLIJST (budget, variatie, ontbijt, lunch, kooktijd, eetstijl,
+dieet, niet_lust, snacks, extra) → buildSchemaPrompt → Gemini genereert 7-daags
+schema (JSON). ImportSchemaModal: startdatum snapt naar maandag, weekdag-uitlijning,
+X weken herhalen. printWeekSchema: pop-up printvenster.
+
+### training (`js/modules/training/index.jsx`)
+Placeholder — nog uit te bouwen.
+
+### auth (`js/modules/auth/index.jsx`)
+Login (naam + wachtwoord), sessiebeheer (3 dagen sliding window), wachtwoord
+verplicht wijzigen bij eerste login, admin-paneel voor gebruikersbeheer.
+
+### onboarding (`js/modules/onboarding/index.jsx`)
+SetupWizard: gewicht/lengte/leeftijd/geslacht/activiteit/doel/macroprofiel
+→ calcMacros → opslaan in localStorage.
 
 ## Bekende beperkingen
 
 - Omdat alles in `localStorage` zit, is data niet gedeeld tussen apparaten of
   gebruikers. Elk toestel staat op zichzelf.
-- Service worker kan oude versies cachen; daarom network-first voor HTML.
+- Service worker kan oude versies cachen; daarom network-first voor HTML/JS.
+  Bump `CACHE` in `sw.js` bij grote wijzigingen (nu `qvolve-v4`).
 - Een centrale database (bv. Firebase) zou nodig zijn voor gedeelde gebruikers
   of synchronisatie — bewust nog niet gedaan om het simpel en gratis te houden.
 
@@ -142,14 +209,15 @@ blauw + oranje accenten.
 - Wijzigingen gaan live door te pushen naar GitHub (branch `main`); Vercel
   deployt de site dan automatisch.
 - Test na elke grote wijziging of de app nog laadt.
+- Elke module is zelfstandig te bewerken; zorg dat globals die je gebruikt
+  beschikbaar zijn in eerder geladen bestanden (zie laadvolgorde hierboven).
 
 ### Lokaal testen — altijd via een webserver, nooit via `file://`
 
-- Open `qvolve.html` **niet** door te dubbelklikken (`file:///...`). Sinds de
-  opsplitsing in modules haalt de in-browser Babel de `js/*.jsx`-bestanden op via
-  fetch, en dat blokkeert de browser over `file://` → de app toont
-  **"Script error. Regel 0"**. Hetzelfde geldt voor de auto-preview die het bestand
-  direct opent.
+- Open `qvolve.html` **niet** door te dubbelklikken (`file:///...`). Babel haalt
+  de `.jsx`-bestanden op via fetch — dat blokkeert over `file://` → de app toont
+  **"Script error. Regel 0"**. Hetzelfde geldt voor de auto-preview die het
+  bestand direct opent.
 - Start in de plaats de lokale dev-server en open de URL:
   `powershell -NoProfile -ExecutionPolicy Bypass -File .claude/serve.ps1`
   → `http://localhost:8765/qvolve.html`
