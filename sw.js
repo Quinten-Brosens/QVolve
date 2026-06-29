@@ -1,4 +1,4 @@
-const CACHE = 'qvolve-v7';
+const CACHE = 'qvolve-v8';
 const ASSETS = [
   '/manifest.json',
   '/icon-192.png',

@@ -191,6 +191,27 @@ const MAPS_ROUTINES = [
   },
 ];
 
+// ── Mapstructuur: MAPS Anabolic (Pre-fase + Fase I-III) ───────────────────────
+// Trigger sessions zijn gelijk over alle fases (op niet-foundational dagen).
+// Extra week-info komt uit de MAPS Anabolic Calendar (Advanced).
+const _byId = id => MAPS_ROUTINES.find(r => r.id === id);
+const TRIGGER_SESSIONS = ['maps-trig-1', 'maps-trig-2', 'maps-trig-3'].map(_byId);
+
+const MAPS_PHASES = [
+  { id: 'pre', name: 'Pre-fase', weeks: 'Weken 1-3', subtitle: 'De basis leggen',
+    schedule: 'Foundational 2×/week · trigger sessions op de tussendagen · rust 90s',
+    workouts: ['maps-pre'].map(_byId) },
+  { id: 'p1', name: 'Fase I — Strength', weeks: 'Weken 4-6', subtitle: 'Maximale kracht & power',
+    schedule: 'Dag 1 & Dag 2 afwisselend · 2-3×/week · trigger sessions op tussendagen · rust tot 3 min',
+    workouts: ['maps-p1-d1', 'maps-p1-d2'].map(_byId) },
+  { id: 'p2', name: 'Fase II — Muscle Fiber', weeks: 'Weken 7-9', subtitle: 'Feel & pump, perfecte vorm',
+    schedule: 'Dag 1 & Dag 2 afwisselend · 2-3×/week · trigger sessions op tussendagen · rust tot 1 min',
+    workouts: ['maps-p2-d1', 'maps-p2-d2'].map(_byId) },
+  { id: 'p3', name: 'Fase III — Muscle Pump', weeks: 'Weken 10-12', subtitle: 'Maximale pump & uithouding',
+    schedule: 'Dag 1, 2 & 3 · 3×/week · trigger sessions op tussendagen · rust max 30s',
+    workouts: ['maps-p3-d1', 'maps-p3-d2', 'maps-p3-d3'].map(_byId) },
+];
+
 // Oefeningenpool voor de picker (uniek, alfabetisch) + extra gangbare oefeningen.
 const MAPS_EXERCISES = (() => {
   const set = new Set();
@@ -410,61 +431,164 @@ function ActiveWorkout({ workout, history, onChange, onFinish, onCancel }) {
 }
 
 // ── Routine-lijst (overzicht) ─────────────────────────────────────────────────
-function RoutineList({ routines, activeWorkout, onStart, onResume, onNew, onEdit, onDelete, onHistory }) {
-  const groups = useMemo(() => {
-    const g = {};
-    routines.forEach(r => { (g[r.group] = g[r.group] || []).push(r); });
-    return g;
-  }, [routines]);
-  const order = Object.keys(groups);
-
+// Mapkaart (navigeert naar een submap)
+function FolderCard({ icon, name, meta, onOpen }) {
   return (
-    <div className="space-y-4">
-      {activeWorkout && (
-        <button onClick={onResume} className="w-full bg-[#182a48] text-white rounded-2xl shadow-sm p-4 flex items-center justify-between">
-          <span className="flex items-center gap-2 text-sm font-semibold"><Icon name="Play" size={16} className="text-orange-400"/> Workout hervatten</span>
-          <span className="text-[11px] text-blue-200">{activeWorkout.name} · {doneSetCount(activeWorkout)} sets</span>
-        </button>
-      )}
-
-      <div className="flex gap-2">
-        <button onClick={onNew} className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-600 rounded-xl py-2 text-xs font-medium">
-          <Icon name="Plus" size={14}/> Eigen routine
-        </button>
-        <button onClick={onHistory} className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-600 rounded-xl py-2 text-xs font-medium">
-          <Icon name="RotateCcw" size={14}/> Geschiedenis
-        </button>
+    <button onClick={onOpen} className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-3 text-left hover:border-gray-300 transition-colors">
+      <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center flex-shrink-0">
+        <Icon name={icon || 'Folder'} size={20} className="text-orange-500"/>
       </div>
+      <div className="min-w-0 flex-1">
+        <h3 className="text-sm font-semibold text-gray-900 truncate">{name}</h3>
+        {meta && <p className="text-[11px] text-gray-400 mt-0.5">{meta}</p>}
+      </div>
+      <Icon name="ChevronRight" size={18} className="text-gray-300 flex-shrink-0"/>
+    </button>
+  );
+}
 
-      {order.map(grp => (
-        <div key={grp}>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-2 px-1">{grp}</p>
-          <div className="space-y-2">
-            {groups[grp].map(r => (
-              <div key={r.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-gray-900">{r.name}</h3>
-                    {r.note && <p className="text-[11px] text-gray-400 mt-0.5">{r.note}</p>}
-                    <p className="text-[11px] text-gray-500 mt-1">{r.exercises.length} oefeningen · {r.exercises.map(e => e.name).slice(0, 3).join(', ')}{r.exercises.length > 3 ? '…' : ''}</p>
-                  </div>
-                  {r.custom && (
-                    <div className="flex flex-col gap-1 flex-shrink-0">
-                      <button onClick={() => onEdit(r)} className="text-gray-400 hover:text-gray-600 p-1"><Icon name="Pencil" size={14}/></button>
-                      <button onClick={() => onDelete(r)} className="text-gray-400 hover:text-red-500 p-1"><Icon name="Trash2" size={14}/></button>
-                    </div>
-                  )}
-                </div>
-                <button onClick={() => onStart(r)} className="mt-3 w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2 text-sm font-semibold flex items-center justify-center gap-1.5">
-                  <Icon name="Play" size={15}/> Start workout
-                </button>
-              </div>
-            ))}
-          </div>
+// Routinekaart (start de workout, optioneel bewerken/verwijderen)
+function RoutineCard({ r, onStart, onEdit, onDelete }) {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-gray-900">{r.name}</h3>
+          {r.note && <p className="text-[11px] text-gray-400 mt-0.5">{r.note}</p>}
+          <p className="text-[11px] text-gray-500 mt-1">{r.exercises.length} oefeningen · {r.exercises.map(e => e.name).slice(0, 3).join(', ')}{r.exercises.length > 3 ? '…' : ''}</p>
         </div>
+        {r.custom && (
+          <div className="flex flex-col gap-1 flex-shrink-0">
+            <button onClick={() => onEdit(r)} className="text-gray-400 hover:text-gray-600 p-1"><Icon name="Pencil" size={14}/></button>
+            <button onClick={() => onDelete(r)} className="text-gray-400 hover:text-red-500 p-1"><Icon name="Trash2" size={14}/></button>
+          </div>
+        )}
+      </div>
+      <button onClick={() => onStart(r)} className="mt-3 w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2 text-sm font-semibold flex items-center justify-center gap-1.5">
+        <Icon name="Play" size={15}/> Start workout
+      </button>
+    </div>
+  );
+}
+
+// Kop met "terug"-knop en kruimelpad voor de submappen
+function FolderHeader({ crumbs, onNav }) {
+  return (
+    <div className="flex items-center gap-1 text-xs text-gray-500 flex-wrap">
+      <button onClick={() => onNav(crumbs.length - 2)} className="flex items-center gap-1 hover:text-gray-700">
+        <Icon name="ChevronLeft" size={16}/> Terug
+      </button>
+      <span className="text-gray-300 mx-1">·</span>
+      {crumbs.map((c, i) => (
+        <span key={i} className="flex items-center gap-1">
+          {i > 0 && <Icon name="ChevronRight" size={12} className="text-gray-300"/>}
+          <button onClick={() => onNav(i)} className={i === crumbs.length - 1 ? 'font-semibold text-gray-700' : 'hover:text-gray-700'}>{c}</button>
+        </span>
       ))}
     </div>
   );
+}
+
+function RoutineList({ phases, triggers, custom, activeWorkout, onStart, onResume, onNew, onEdit, onDelete, onHistory }) {
+  // path: [] = root, ['maps'] = MAPS-map, ['maps', phaseId] = fase, ['eigen'] = eigen routines
+  const [path, setPath] = useState([]);
+  const navTo = i => setPath(i < 0 ? [] : path.slice(0, i + 1));
+
+  const ResumeBanner = activeWorkout ? (
+    <button onClick={onResume} className="w-full bg-[#182a48] text-white rounded-2xl shadow-sm p-4 flex items-center justify-between">
+      <span className="flex items-center gap-2 text-sm font-semibold"><Icon name="Play" size={16} className="text-orange-400"/> Workout hervatten</span>
+      <span className="text-[11px] text-blue-200">{activeWorkout.name} · {doneSetCount(activeWorkout)} sets</span>
+    </button>
+  ) : null;
+
+  // ── Root: top-mappen ──
+  if (path.length === 0) {
+    return (
+      <div className="space-y-4">
+        {ResumeBanner}
+        <button onClick={onHistory} className="w-full flex items-center justify-center gap-1.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-600 rounded-xl py-2 text-xs font-medium">
+          <Icon name="RotateCcw" size={14}/> Geschiedenis
+        </button>
+        <div className="space-y-2">
+          <FolderCard icon="Dumbbell" name="MAPS Anabolic" meta={`${phases.length} fases · ${phases.reduce((n, p) => n + p.workouts.length, 0)} workouts + trigger sessions`} onOpen={() => setPath(['maps'])}/>
+          <FolderCard icon="Pencil" name="Eigen routines" meta={custom.length ? `${custom.length} ${custom.length === 1 ? 'routine' : 'routines'}` : 'Nog geen — zelf samenstellen'} onOpen={() => setPath(['eigen'])}/>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Eigen routines ──
+  if (path[0] === 'eigen') {
+    return (
+      <div className="space-y-4">
+        <FolderHeader crumbs={['Eigen routines']} onNav={navTo}/>
+        {ResumeBanner}
+        <button onClick={onNew} className="w-full flex items-center justify-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 text-sm font-semibold">
+          <Icon name="Plus" size={15}/> Nieuwe routine
+        </button>
+        {custom.length === 0 ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
+            <Icon name="Pencil" size={26} className="mx-auto text-gray-300 mb-3"/>
+            <p className="text-sm text-gray-500">Nog geen eigen routines. Maak er een aan met de knop hierboven.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {custom.map(r => <RoutineCard key={r.id} r={r} onStart={onStart} onEdit={onEdit} onDelete={onDelete}/>)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── MAPS: fasekeuze ──
+  if (path[0] === 'maps' && path.length === 1) {
+    return (
+      <div className="space-y-4">
+        <FolderHeader crumbs={['MAPS Anabolic']} onNav={navTo}/>
+        {ResumeBanner}
+        <div className="space-y-2">
+          {phases.map(p => (
+            <FolderCard key={p.id} icon="Folder" name={p.name}
+              meta={`${p.weeks} · ${p.workouts.length} ${p.workouts.length === 1 ? 'workout' : 'workouts'} + ${triggers.length} trigger sessions`}
+              onOpen={() => setPath(['maps', p.id])}/>
+          ))}
+        </div>
+        <p className="text-[11px] text-gray-400 px-1">Doorloop elke fase 3 weken voor je naar de volgende gaat. De trigger sessions blijven gelijk over alle fases.</p>
+      </div>
+    );
+  }
+
+  // ── MAPS: inhoud van een fase (workouts + trigger sessions) ──
+  if (path[0] === 'maps' && path.length === 2) {
+    const phase = phases.find(p => p.id === path[1]);
+    if (!phase) { setPath(['maps']); return null; }
+    return (
+      <div className="space-y-4">
+        <FolderHeader crumbs={['MAPS Anabolic', phase.name]} onNav={navTo}/>
+        {ResumeBanner}
+        <div className="bg-orange-50 border border-orange-100 rounded-xl px-3 py-2.5">
+          <p className="text-xs font-semibold text-orange-700">{phase.weeks} · {phase.subtitle}</p>
+          <p className="text-[11px] text-orange-600/80 mt-0.5">{phase.schedule}</p>
+        </div>
+
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-2 px-1">Workouts</p>
+          <div className="space-y-2">
+            {phase.workouts.map(r => <RoutineCard key={r.id} r={r} onStart={onStart}/>)}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-2 px-1">Trigger sessions</p>
+          <div className="space-y-2">
+            {triggers.map(r => <RoutineCard key={r.id} r={r} onStart={onStart}/>)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 // ── Workout-geschiedenis ──────────────────────────────────────────────────────
@@ -622,8 +746,6 @@ function TrainingPanel({ userSlug, profile }) {
     setHistory(lsGet(`training-history:${userSlug}`) || []);
   }, [userSlug]);
 
-  const routines = useMemo(() => [...custom, ...MAPS_ROUTINES], [custom]);
-
   function persistActive(w) { setActive(w); if (w) lsSet(`training-active:${userSlug}`, w); else lsDel(`training-active:${userSlug}`); }
 
   function startWorkout(routine) {
@@ -664,7 +786,7 @@ function TrainingPanel({ userSlug, profile }) {
   if (view === 'editor') return <RoutineEditor initial={editing} onSave={saveRoutine} onCancel={() => { setEditing(null); setView('overview'); }}/>;
 
   return (
-    <RoutineList routines={routines} activeWorkout={active}
+    <RoutineList phases={MAPS_PHASES} triggers={TRIGGER_SESSIONS} custom={custom} activeWorkout={active}
       onStart={startWorkout}
       onResume={() => setView('active')}
       onNew={() => { setEditing(null); setView('editor'); }}

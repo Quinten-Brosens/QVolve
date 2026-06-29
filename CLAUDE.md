@@ -196,7 +196,10 @@ read-only routines (`MAPS_ROUTINES`): Pre Phase, Phase I/II/III foundational
 workouts + 3 trigger sessions, met exacte sets/reps en fase-rusttijden. Eigen
 routines zijn bewerkbaar en staan in localStorage.
 - **TrainingPanel**: root, view-state `overview | active | history | editor`.
-- **RoutineList**: routines gegroepeerd per fase + "Eigen routines"; start/hervat.
+- **RoutineList**: mappenbrowser (drill-down met kruimelpad). Root → 📁 MAPS
+  Anabolic + 📁 Eigen routines. MAPS → fases (Pre/I/II/III, `MAPS_PHASES`) →
+  per fase een sectie Workouts + sectie Trigger sessions (`TRIGGER_SESSIONS`,
+  gedeeld). Week-/planningsinfo per fase komt uit de MAPS-kalender.
 - **ActiveWorkout**: live loggen — per oefening setrijen (set# · vorige · kg ·
   reps · ✓). Set afvinken start de **RestTimer** (per-fase rusttijd, +15/-15/skip).
   De "vorige"-kolom toont je laatste prestatie via `lastPerformance(history,…)`.
