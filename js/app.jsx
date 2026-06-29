@@ -235,7 +235,7 @@ function App() {
           )
         )}
 
-        {tab === 'training' && <TrainingPlaceholder/>}
+        {tab === 'training' && <TrainingPanel userSlug={userSlug} profile={profile}/>}
 
       </main>
 

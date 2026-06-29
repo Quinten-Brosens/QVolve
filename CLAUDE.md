@@ -65,7 +65,10 @@ js/
       index.jsx       — VRAGENLIJST, buildSchemaPrompt, VragenlijstStap,
                         printWeekSchema, ImportSchemaModal, WeekSchemaPanel
     training/
-      index.jsx       — TrainingPlaceholder (nog uit te bouwen)
+      index.jsx       — MAPS_ROUTINES (Hevy-stijl), tNewWorkoutFromRoutine,
+                        lastPerformance, workoutVolume, RestTimer, SetRow,
+                        ActiveWorkout, RoutineList, WorkoutHistory,
+                        RoutineEditor, TrainingPanel
   app.jsx             — App root: state, routing tussen tabs, FAB-knop
 ```
 
@@ -147,6 +150,10 @@ blauw + oranje accenten.
 - `weekschema-prefs:{slug}` — antwoorden vragenlijst
 - `weekschema-plan:{slug}` — gegenereerd weekschema
 - `shop-state:{slug}:{start}:{end}` — boodschappenlijst staat (afgevinkt, extra's)
+- `training-routines:{slug}` — eigen/aangepaste trainingsroutines
+- `training-active:{slug}` — lopende workout (overleeft refresh)
+- `training-history:{slug}` — voltooide workouts (nieuwste eerst)
+- `training-prefs:{slug}` — trainings-defaults (gereserveerd)
 
 (`slug` = naam via `slugifyName()`, bv. "quinten-brosens".)
 
@@ -184,7 +191,19 @@ schema (JSON). ImportSchemaModal: startdatum snapt naar maandag, weekdag-uitlijn
 X weken herhalen. printWeekSchema: pop-up printvenster.
 
 ### training (`js/modules/training/index.jsx`)
-Placeholder — nog uit te bouwen.
+Workout-tracker in de stijl van **Hevy**. MAPS Anabolic is voorgeladen als
+read-only routines (`MAPS_ROUTINES`): Pre Phase, Phase I/II/III foundational
+workouts + 3 trigger sessions, met exacte sets/reps en fase-rusttijden. Eigen
+routines zijn bewerkbaar en staan in localStorage.
+- **TrainingPanel**: root, view-state `overview | active | history | editor`.
+- **RoutineList**: routines gegroepeerd per fase + "Eigen routines"; start/hervat.
+- **ActiveWorkout**: live loggen — per oefening setrijen (set# · vorige · kg ·
+  reps · ✓). Set afvinken start de **RestTimer** (per-fase rusttijd, +15/-15/skip).
+  De "vorige"-kolom toont je laatste prestatie via `lastPerformance(history,…)`.
+  Lopende workout wordt live bewaard in `training-active` (overleeft refresh).
+- **WorkoutHistory**: voltooide workouts met datum/duur/volume, uitklapbaar.
+- **RoutineEditor**: eigen routine maken/bewerken met oefening-picker
+  (`MAPS_EXERCISES`).
 
 ### auth (`js/modules/auth/index.jsx`)
 Login (naam + wachtwoord), sessiebeheer (3 dagen sliding window), wachtwoord
