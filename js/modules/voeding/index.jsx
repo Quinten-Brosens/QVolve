@@ -142,10 +142,20 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
     setBarcodeLoading(false);
   }
 
+  const fmtG = v => { v = Number(v) || 0; return v > 0 && v < 10 ? Math.round(v * 10) / 10 : Math.round(v); };
   const renderRow = (item) => (
-    <button key={item.id} onClick={() => addToStaged(item)} className="w-full text-left px-3 py-2.5 hover:bg-orange-50 text-sm flex justify-between items-center gap-2">
-      <span className="text-gray-800 truncate">{item.name}</span>
-      <span className="text-xs text-gray-400 flex items-center gap-1 shrink-0">{Math.round(item.kcal)} kcal{item.perGram ? '/100g' : ''} <Icon name="Plus" size={12} className="text-orange-400"/></span>
+    <button key={item.id} onClick={() => addToStaged(item)} className="w-full text-left px-3 py-2.5 hover:bg-orange-50 flex items-center justify-between gap-2">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-gray-800 truncate">{item.name}</p>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[11px]">
+          <span className="text-orange-500 font-medium">{Math.round(item.kcal)} kcal{item.perGram ? '/100g' : ''}</span>
+          <span className="text-gray-300">·</span>
+          <span className="text-[#2f8bff]">E {fmtG(item.protein)}g</span>
+          <span className="text-[#1e3a8a]">KH {fmtG(item.carbs)}g</span>
+          <span className="text-[#f59e0b]">V {fmtG(item.fat)}g</span>
+        </div>
+      </div>
+      <Icon name="Plus" size={14} className="text-orange-400 shrink-0"/>
     </button>
   );
 
