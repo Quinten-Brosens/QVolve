@@ -2,11 +2,35 @@
 // Publieke read-API: geen sleutel, geen login, CORS toegestaan → rechtstreeks
 // vanuit de browser. Resultaten gemapt op hetzelfde formaat als NEVO (per 100g).
 
+const KJ_PER_KCAL = 4.184;
+
+// Bepaalt de energie per 100g in kcal en corrigeert een veelvoorkomende OFF-datafout:
+// soms staat de waarde in kJ in het kcal-veld (bv. bosbessen "218 kcal" i.p.v. 52).
+// We detecteren dat als het kcal-veld ≈ het kJ-veld is, óf als het ~4,18× hoger ligt
+// dan de Atwater-energie van de macro's (4·eiwit + 4·KH + 9·vet). Alcohol (veel kcal,
+// nul macro's) wordt zo niet vals gecorrigeerd: daar valt de Atwater-check weg.
+function offEnergyKcal100(n) {
+  const kcalRaw = Number(n['energy-kcal_100g']);
+  const kj = Number(n['energy-kj_100g']) || Number(n['energy_100g']) || 0;
+  const atwater = 4 * (Number(n.proteins_100g) || 0)
+                + 4 * (Number(n.carbohydrates_100g) || 0)
+                + 9 * (Number(n.fat_100g) || 0);
+  if (kcalRaw > 0) {
+    const looksLikeKj =
+      (kj > 0 && kcalRaw >= kj * 0.9) ||
+      (atwater >= 20 && kcalRaw >= atwater * 2.5
+        && Math.abs(kcalRaw / KJ_PER_KCAL - atwater) < Math.abs(kcalRaw - atwater));
+    return looksLikeKj ? kcalRaw / KJ_PER_KCAL : kcalRaw;
+  }
+  // Geen kcal-veld → uit kJ afleiden indien beschikbaar.
+  return kj > 0 ? kj / KJ_PER_KCAL : null;
+}
+
 function mapOffProduct(p) {
   if (!p) return null;
   const n = p.nutriments || {};
-  const kcal = n['energy-kcal_100g'];
   const protein = n.proteins_100g;
+  const kcal = offEnergyKcal100(n);
   if (kcal == null || protein == null) return null;
   let name = (p.product_name_nl || p.product_name || '').trim();
   if (!name) return null;
