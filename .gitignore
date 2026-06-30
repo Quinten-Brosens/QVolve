@@ -4,3 +4,7 @@
 # OS-bestanden
 Thumbs.db
 .DS_Store
+desktop.ini
+
+# Bron-PDF's van het MAPS-programma (privé, niet in de repo)
+Maps anabolic/
