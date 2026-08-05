@@ -77,6 +77,30 @@ function loadScript(src) {
   });
 }
 
+// Foto verkleinen tot base64-JPEG (voor AI-maaltijdherkenning).
+// Grote telefoonfoto's (5-10 MB) worden zo ~100-300 KB vóór ze naar de proxy gaan.
+function fileToResizedBase64(file, maxDim = 1024, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        URL.revokeObjectURL(url);
+        resolve({ data: dataUrl.split(',')[1], mimeType: 'image/jpeg', previewUrl: dataUrl });
+      } catch (e) { URL.revokeObjectURL(url); reject(new Error('Kon de foto niet verwerken.')); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Kon de foto niet lezen.')); };
+    img.src = url;
+  });
+}
+
 // Camera-foutmeldingen begrijpelijk maken
 function humanizeCamError(e) {
   const msg = (e && e.message) || String(e);

@@ -73,7 +73,7 @@ function BarcodeScanner({ onDetected, onClose }) {
 }
 
 // ─── AddFoodOverlay ───────────────────────────────────────────────────────────
-function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remaining }) {
+function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remaining, favorites = [], onToggleFavorite, recents = [], onUsedFoods }) {
   const [activeMeal, setActiveMeal] = useState(initialMeal || MEAL_TIMES[0].key);
   const [tab, setTab] = useState('search');
 
@@ -95,6 +95,13 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
   const [aiResult, setAiResult] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
+
+  const [photo, setPhoto] = useState(null);
+  const [photoNote, setPhotoNote] = useState('');
+  const [photoItems, setPhotoItems] = useState(null);
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const [photoError, setPhotoError] = useState('');
+  const photoInputRef = useRef(null);
 
   const [sugKcal, setSugKcal] = useState(String(Math.round(remaining?.kcal || 0)));
   const [sugProtein, setSugProtein] = useState(String(Math.round(remaining?.protein || 0)));
@@ -143,8 +150,11 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
   }
 
   const fmtG = v => { v = Number(v) || 0; return v > 0 && v < 10 ? Math.round(v * 10) / 10 : Math.round(v); };
+  const favKey = f => f.id != null ? String(f.id) : f.name;
+  const favSet = useMemo(() => new Set(favorites.map(favKey)), [favorites]);
+  const visibleRecents = useMemo(() => recents.filter(r => !favSet.has(favKey(r))), [recents, favSet]);
   const renderRow = (item) => (
-    <button key={item.id} onClick={() => addToStaged(item)} className="w-full text-left px-3 py-2.5 hover:bg-orange-50 flex items-center justify-between gap-2">
+    <div key={favKey(item)} onClick={() => addToStaged(item)} className="w-full text-left px-3 py-2.5 hover:bg-orange-50 flex items-center justify-between gap-2 cursor-pointer">
       <div className="min-w-0 flex-1">
         <p className="text-sm text-gray-800 truncate">{item.name}</p>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[11px]">
@@ -155,8 +165,14 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
           <span className="text-[#f59e0b]">V {fmtG(item.fat)}g</span>
         </div>
       </div>
+      {onToggleFavorite && (
+        <button onClick={e => { e.stopPropagation(); onToggleFavorite(item); }} title={favSet.has(favKey(item)) ? 'Verwijder uit favorieten' : 'Bewaar als favoriet'}
+          className={`shrink-0 p-1 ${favSet.has(favKey(item)) ? 'text-amber-400 hover:text-amber-500' : 'text-gray-300 hover:text-amber-400'}`}>
+          <Icon name={favSet.has(favKey(item)) ? 'StarFilled' : 'Star'} size={15}/>
+        </button>
+      )}
       <Icon name="Plus" size={14} className="text-orange-400 shrink-0"/>
-    </button>
+    </div>
   );
 
   function addToStaged(item) {
@@ -168,6 +184,7 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
   function removeStaged(id) { setStaged(s => s.filter(it => it.stagedId !== id)); }
 
   function confirmAll() {
+    if (onUsedFoods && staged.length) onUsedFoods(staged);
     const entries = staged.map(item => {
       if (item.perGram) {
         const g = parseFloat(item.grams) || 0;
@@ -187,6 +204,43 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
     onSaveCustom(food);
     if (addToLog) { addToStaged(food); setTab('search'); setManual(emptyManual); }
     else { setManualSaved(true); setManual(emptyManual); setTimeout(() => setManualSaved(false), 3000); }
+  }
+
+  async function handlePhotoPick(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    setPhotoError(''); setPhotoItems(null);
+    try { setPhoto(await fileToResizedBase64(file)); }
+    catch (err) { setPhoto(null); setPhotoError(err.message || 'Kon de foto niet verwerken.'); }
+  }
+
+  async function handlePhotoAnalyze() {
+    if (!photo) return;
+    setPhotoLoading(true); setPhotoError(''); setPhotoItems(null);
+    try {
+      const items = await estimateFoodFromPhoto(photo, photoNote);
+      if (!items.length) setPhotoError('Geen eten herkend op de foto. Probeer een duidelijkere foto of beschrijf het hieronder met tekst.');
+      else setPhotoItems(items);
+    } catch (e) { setPhotoError(e.message || 'Kon de foto niet analyseren.'); }
+    setPhotoLoading(false);
+  }
+
+  function removePhotoItem(idx) {
+    setPhotoItems(items => {
+      const next = items.filter((_, i) => i !== idx);
+      return next.length ? next : null;
+    });
+  }
+
+  function addPhotoItems() {
+    if (!photoItems || !photoItems.length) return;
+    onAdd(photoItems.map(it => ({
+      id: `log-${Date.now()}-${Math.random()}`, name: it.name, grams: null,
+      kcal: it.kcal || 0, protein: it.protein || 0, fat: it.fat || 0, carbs: it.carbs || 0,
+      source: 'ai', portionDescription: it.portionDescription
+    })), activeMeal);
+    onClose();
   }
 
   async function handleAiEstimate() {
@@ -318,7 +372,27 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
                 </button>
               </div>
             )}
-            {!query.trim() && staged.length === 0 && (
+            {!query.trim() && (favorites.length > 0 || visibleRecents.length > 0) && (
+              <div className="space-y-3">
+                {favorites.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-medium text-gray-400 px-1 mb-1 flex items-center gap-1"><Icon name="StarFilled" size={11} className="text-amber-400"/> Favorieten</p>
+                    <div className="bg-white border border-gray-100 rounded-xl divide-y divide-gray-50">
+                      {favorites.map(renderRow)}
+                    </div>
+                  </div>
+                )}
+                {visibleRecents.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-medium text-gray-400 px-1 mb-1 flex items-center gap-1"><Icon name="History" size={11}/> Recent gebruikt</p>
+                    <div className="bg-white border border-gray-100 rounded-xl divide-y divide-gray-50">
+                      {visibleRecents.map(renderRow)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {!query.trim() && staged.length === 0 && favorites.length === 0 && visibleRecents.length === 0 && (
               <p className="text-sm text-gray-300 text-center pt-8">Zoek een voedingsmiddel hierboven of scan een barcode.</p>
             )}
           </div>
@@ -360,7 +434,59 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
         {tab === 'describe' && (
           <div className="space-y-3">
             <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
-              <p className="text-xs text-gray-500">Beschrijf wat je hebt gegeten en AI schat de macro's.</p>
+              <div>
+                <p className="text-sm font-semibold text-gray-800 mb-0.5">Herken uit foto</p>
+                <p className="text-xs text-gray-500">Neem een foto van je bord en AI herkent het eten en schat de macro's.</p>
+              </div>
+              {/* Geen capture-attribuut: zo krijgt de gebruiker op mobiel de keuze camera óf galerij */}
+              <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoPick} className="hidden"/>
+              {!photo ? (
+                <button onClick={() => photoInputRef.current && photoInputRef.current.click()}
+                  className="w-full border-2 border-dashed border-gray-200 hover:border-[#2f8bff] rounded-xl py-6 text-sm text-gray-500 hover:text-[#2f8bff] flex flex-col items-center gap-2">
+                  <Icon name="Camera" size={24}/> Maak of kies een foto
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <img src={photo.previewUrl} alt="Maaltijdfoto" className="w-full max-h-56 object-cover rounded-xl"/>
+                    <button onClick={() => { setPhoto(null); setPhotoItems(null); setPhotoError(''); }}
+                      className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center"><Icon name="X" size={14}/></button>
+                  </div>
+                  <input value={photoNote} onChange={e => setPhotoNote(e.target.value)} placeholder="Optioneel: extra info (bv. 'volkoren pasta, lightsaus')"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"/>
+                  <button onClick={handlePhotoAnalyze} disabled={photoLoading}
+                    className="w-full bg-[#2f8bff] hover:bg-[#2076e8] disabled:bg-gray-300 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+                    {photoLoading ? <Icon name="Loader2" size={14}/> : <Icon name="Sparkles" size={14}/>}{photoLoading ? 'Foto analyseren…' : 'Herken eten op foto'}
+                  </button>
+                </div>
+              )}
+              {photoError && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{photoError}</p>}
+              {photoItems && (
+                <div className="border border-orange-100 bg-orange-50 rounded-xl p-3 space-y-2">
+                  <p className="text-xs font-semibold text-gray-700">Herkend op de foto — verwijder wat niet klopt:</p>
+                  <div className="bg-white rounded-lg divide-y divide-gray-50 border border-orange-100">
+                    {photoItems.map((it, i) => (
+                      <div key={i} className="flex items-center gap-2 px-3 py-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-800 truncate">{it.name}</p>
+                          <p className="text-[11px] text-gray-500">{it.portionDescription ? `${it.portionDescription} · ` : ''}{Math.round(it.kcal)} kcal · E {Math.round(it.protein)}g · V {Math.round(it.fat)}g · KH {Math.round(it.carbs)}g</p>
+                        </div>
+                        <button onClick={() => removePhotoItem(i)} className="text-gray-300 hover:text-red-500 shrink-0"><Icon name="X" size={14}/></button>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-600 font-medium">
+                    Totaal: {Math.round(photoItems.reduce((a, it) => a + (it.kcal || 0), 0))} kcal · {Math.round(photoItems.reduce((a, it) => a + (it.protein || 0), 0))}g eiwit · {Math.round(photoItems.reduce((a, it) => a + (it.fat || 0), 0))}g vet · {Math.round(photoItems.reduce((a, it) => a + (it.carbs || 0), 0))}g KH
+                  </p>
+                  <button onClick={addPhotoItems} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2 text-xs font-medium">
+                    Toevoegen aan {MEAL_TIMES.find(m => m.key === activeMeal)?.label.toLowerCase() || 'logboek'} ({photoItems.length})
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
+              <p className="text-xs text-gray-500">Of beschrijf wat je hebt gegeten en AI schat de macro's.</p>
               <textarea value={description} onChange={e => setDescription(e.target.value)}
                 placeholder="Bv. 150g kipfilet met rijst en broccoli" rows={3}
                 className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none" />
@@ -438,8 +564,82 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
   );
 }
 
+// ─── Gelogd item bewerken ─────────────────────────────────────────────────────
+// Grammen (bij per-gram producten) of portiefactor (bij vaste porties/AI-schattingen)
+// aanpassen zonder het item te verwijderen. Macro's schalen proportioneel mee.
+function EditLogEntryModal({ entry, onSave, onClose }) {
+  const hasGrams = Number(entry.grams) > 0;
+  const [grams, setGrams] = useState(hasGrams ? String(entry.grams) : '');
+  const [factor, setFactor] = useState('1');
+  const [mealTime, setMealTime] = useState(entry.mealTime);
+  const num = v => parseFloat(String(v).replace(',', '.'));
+  const ratio = hasGrams ? (num(grams) || 0) / Number(entry.grams) : (num(factor) || 0);
+  const valid = ratio > 0 && isFinite(ratio);
+  const preview = { kcal: entry.kcal * ratio, protein: entry.protein * ratio, fat: entry.fat * ratio, carbs: entry.carbs * ratio };
+
+  function save() {
+    if (!valid) return;
+    const patch = { mealTime, kcal: preview.kcal, protein: preview.protein, fat: preview.fat, carbs: preview.carbs };
+    if (hasGrams) patch.grams = Math.round(num(grams) * 10) / 10;
+    onSave(entry.id, patch);
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-100">
+          <span className="text-sm font-semibold text-gray-900 truncate pr-2">{entry.name}</span>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 shrink-0"><Icon name="X" size={18}/></button>
+        </div>
+        <div className="p-5 space-y-4">
+          {hasGrams ? (
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Hoeveelheid</label>
+              <div className="flex items-center gap-2">
+                <input type="number" inputMode="decimal" min="0" autoFocus value={grams} onChange={e => setGrams(e.target.value)}
+                  className="w-28 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-orange-400"/>
+                <span className="text-sm text-gray-500">gram</span>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Portiegrootte</label>
+              <div className="flex gap-1.5 mb-2">
+                {[0.5, 1, 1.5, 2].map(f => (
+                  <button key={f} onClick={() => setFactor(String(f))}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${num(factor) === f ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}>{f}×</button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="number" inputMode="decimal" min="0" step="0.1" value={factor} onChange={e => setFactor(e.target.value)}
+                  className="w-24 border border-gray-200 rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-orange-400"/>
+                <span className="text-sm text-gray-500">× de gelogde portie</span>
+              </div>
+              {entry.portionDescription && <p className="text-[11px] text-gray-400 mt-1.5">Gelogde portie: {entry.portionDescription}</p>}
+            </div>
+          )}
+
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">Eetmoment</label>
+            <MealTimeSelector active={mealTime} onChange={setMealTime}/>
+          </div>
+
+          <div className={`rounded-xl px-3 py-2 text-xs ${valid ? 'bg-gray-50 text-gray-600' : 'bg-red-50 text-red-500'}`}>
+            {valid
+              ? <>Wordt: <b className="text-orange-600">{Math.round(preview.kcal)} kcal</b> · E {Math.round(preview.protein)}g · V {Math.round(preview.fat)}g · KH {Math.round(preview.carbs)}g</>
+              : 'Vul een geldige hoeveelheid in.'}
+          </div>
+
+          <button onClick={save} disabled={!valid} className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white rounded-xl py-2.5 text-sm font-medium">Opslaan</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── DailyLogList ─────────────────────────────────────────────────────────────
-function DailyLogList({ log, onRemove, onOpenAdd }) {
+function DailyLogList({ log, onRemove, onOpenAdd, onEdit }) {
   const grouped = useMemo(() => groupByMeal(log), [log]);
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
@@ -464,9 +664,10 @@ function DailyLogList({ log, onRemove, onOpenAdd }) {
                   {entries.map(e => (
                     <div key={e.id} className="py-1 border-b border-gray-50 last:border-0">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm text-gray-800 flex-1 min-w-0">{e.name}{e.grams ? ` · ${e.grams}g` : ''}</p>
+                        <p onClick={() => onEdit && onEdit(e)} className={`text-sm text-gray-800 flex-1 min-w-0 ${onEdit ? 'cursor-pointer' : ''}`}>{e.name}{e.grams ? ` · ${e.grams}g` : ''}</p>
                         <div className="flex items-center gap-2 ml-2">
                           <span className="text-xs text-gray-400">{Math.round(e.kcal)} kcal</span>
+                          {onEdit && <button onClick={() => onEdit(e)} className="text-gray-300 hover:text-orange-500" title="Hoeveelheid aanpassen"><Icon name="Pencil" size={14}/></button>}
                           <button onClick={() => onRemove(e.id)} className="text-gray-300 hover:text-red-500"><Icon name="Trash2" size={15}/></button>
                         </div>
                       </div>

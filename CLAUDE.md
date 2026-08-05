@@ -37,11 +37,12 @@ data/
 js/
   lib/
     utils.jsx         — lsGet/lsSet/lsDel, datum-helpers, normalizeMealTime,
-                        groupByMeal, loadScript, humanizeCamError, React destructuring
+                        groupByMeal, loadScript, fileToResizedBase64,
+                        humanizeCamError, React destructuring
     macros.jsx        — MEAL_TIMES, ACTIVITY_FACTORS, GOALS, MACRO_PROFILES,
                         calcBMR, calcMacros, applyKcalToMacros, NEVO_VERSION
-    ai.jsx            — callGemini, parseJsonFromAI, estimateFoodWithAI,
-                        suggestMealWithAI
+    ai.jsx            — callGemini (optioneel met foto), parseJsonFromAI,
+                        estimateFoodWithAI, estimateFoodFromPhoto, suggestMealWithAI
     off.jsx           — mapOffProduct, offListToFoods, searchOpenFoodFacts,
                         lookupOffBarcode
     icons.jsx         — icons{} map + Icon({name,size,className}) component
@@ -53,10 +54,12 @@ js/
       index.jsx       — SetupWizard (profiel invullen, macro's berekenen)
     dashboard/
       index.jsx       — CalorieSummary, MacroRing, MacroBreakdownModal,
-                        DateNav, KcalAdjuster, MealTimeSelector
+                        DateNav, KcalAdjuster, MealTimeSelector,
+                        WeightCard + WeightChart (gewichtstracking)
     voeding/
       index.jsx       — BarcodeScanner, AddFoodOverlay (4 tabs: zoeken/manueel/
-                        AI-schatting/AI-voorstel), DailyLogList, RepeatDayModal
+                        AI-schatting incl. foto-herkenning/AI-voorstel),
+                        EditLogEntryModal, DailyLogList, RepeatDayModal
     boodschappenlijst/
       index.jsx       — SHOP_CATEGORIES, SHOP_KEYWORDS, SYNONYMS, stemNL,
                         categorizeIngredient, parseIngredient, labelFor,
@@ -121,6 +124,9 @@ blauw + oranje accenten.
   GitHub of in client-code belanden. Optioneel `ALLOWED_ORIGINS` (komma-gescheiden)
   beperkt welke origins de proxy mogen aanroepen.
 - AI wordt gebruikt voor: weekschema genereren, maaltijd schatten uit tekst,
+  **maaltijd herkennen uit een foto** (multimodaal: de client verkleint de foto
+  tot max. 1024px JPEG via `fileToResizedBase64` en stuurt hem als base64
+  `image` mee naar de proxy, die hem als `inlineData` doorgeeft), en
   maaltijdsuggestie op basis van resterende macro's.
 
 ## Gebruikers & opslag
@@ -144,6 +150,9 @@ blauw + oranje accenten.
 - `macros:{slug}` — berekende macro's
 - `daily-log:{slug}:{datum}` — voedingslogboek per dag
 - `custom-foods:{slug}` — eigen voedingsmiddelen
+- `favorites:{slug}` — favoriete voedingsmiddelen (ster in de zoektab)
+- `recent-foods:{slug}` — recent gelogde voedingsmiddelen (max. 20)
+- `weight-log:{slug}` — gewichtsmetingen, array van `{date, kg}`
 - `weekschema-prefs:{slug}` — antwoorden vragenlijst
 - `weekschema-plan:{slug}` — gegenereerd weekschema
 - `shop-state:{slug}:{start}:{end}` — boodschappenlijst staat (afgevinkt, extra's)
@@ -155,17 +164,24 @@ blauw + oranje accenten.
 ### dashboard (`js/modules/dashboard/index.jsx`)
 CalorieSummary (balk + tekst), MacroRing (SVG-donut, toont `gegeten/doel g`),
 MacroBreakdownModal (taartdiagram + top-5 per macro), DateNav, KcalAdjuster,
-MealTimeSelector.
+MealTimeSelector, WeightCard (gewicht loggen per dag, SVG-grafiek met 7-daags
+voortschrijdend gemiddelde, delta's over 7/30 dagen, knop om het laatste
+gewicht over te nemen in het profiel → macro's herberekend).
 
 ### voeding (`js/modules/voeding/index.jsx`)
 - **AddFoodOverlay**: fullscreen overlay met 4 tabs:
   - *Zoeken* — NEVO + eigen producten (instant) + Open Food Facts (debounced)
-    + barcodescan (`html5-qrcode`, lazy van CDN)
+    + barcodescan (`html5-qrcode`, lazy van CDN). Zonder zoekterm: favorieten
+    (ster-toggle per rij) en recent gebruikte producten.
   - *Zelf ingeven* — handmatige invoer per 100g, opslaan in eigen lijst
-  - *AI-schatting* — vrije tekstbeschrijving → Gemini schat macro's
+  - *AI-schatting* — foto-herkenning (foto → Gemini herkent onderdelen +
+    portie + macro's, items individueel te verwijderen vóór toevoegen) én
+    vrije tekstbeschrijving → Gemini schat macro's
   - *AI Voorstel* — doel-macro's (standaard = resterend voor die dag) →
     Gemini stelt een maaltijd voor
-- **DailyLogList**: dagboek gegroepeerd per eetmoment, + knop per maaltijd
+- **DailyLogList**: dagboek gegroepeerd per eetmoment, + knop per maaltijd,
+  potlood per item → EditLogEntryModal (grammen of portiefactor aanpassen,
+  eetmoment verplaatsen; macro's schalen proportioneel mee)
 - **RepeatDayModal**: huidige dag kopiëren naar weekdagen voor X weken
 - **BarcodeScanner**: camera-overlay via html5-qrcode
 
@@ -199,7 +215,7 @@ SetupWizard: gewicht/lengte/leeftijd/geslacht/activiteit/doel/macroprofiel
 - Omdat alles in `localStorage` zit, is data niet gedeeld tussen apparaten of
   gebruikers. Elk toestel staat op zichzelf.
 - Service worker kan oude versies cachen; daarom network-first voor HTML/JS.
-  Bump `CACHE` in `sw.js` bij grote wijzigingen (nu `qvolve-v4`).
+  Bump `CACHE` in `sw.js` bij grote wijzigingen (nu `qvolve-v7`).
 - Een centrale database (bv. Firebase) zou nodig zijn voor gedeelde gebruikers
   of synchronisatie — bewust nog niet gedaan om het simpel en gratis te houden.
 

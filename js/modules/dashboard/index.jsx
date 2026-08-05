@@ -162,6 +162,136 @@ function KcalAdjuster({ targetKcal, onAdjust, onReset }) {
   );
 }
 
+// ─── Gewichtstracking ─────────────────────────────────────────────────────────
+// Dagelijks gewicht loggen (opslag: weight-log:{slug} = [{date,kg}]), met
+// SVG-grafiek, 7-daags voortschrijdend gemiddelde en delta's t.o.v. 7/30 dagen.
+
+function WeightChart({ entries }) {
+  if (entries.length < 2) return <p className="text-xs text-gray-300 text-center py-6">Log minstens twee metingen om de grafiek te zien.</p>;
+  const W = 300, H = 110, PAD = { l: 30, r: 8, t: 8, b: 16 };
+  const t0 = new Date(entries[0].date + 'T00:00:00').getTime();
+  const t1 = new Date(entries[entries.length - 1].date + 'T00:00:00').getTime();
+  const span = Math.max(t1 - t0, 1);
+  const kgs = entries.map(e => e.kg);
+  const lo = Math.min(...kgs), hi = Math.max(...kgs);
+  const padKg = Math.max((hi - lo) * 0.15, 0.5);
+  const yLo = lo - padKg, yHi = hi + padKg;
+  const X = e => PAD.l + ((new Date(e.date + 'T00:00:00').getTime() - t0) / span) * (W - PAD.l - PAD.r);
+  const Y = kg => PAD.t + (1 - (kg - yLo) / (yHi - yLo)) * (H - PAD.t - PAD.b);
+
+  // 7-daags voortschrijdend gemiddelde (op datum, niet op index)
+  const DAY = 86400000;
+  const avg = entries.map(e => {
+    const t = new Date(e.date + 'T00:00:00').getTime();
+    const win = entries.filter(x => { const xt = new Date(x.date + 'T00:00:00').getTime(); return xt <= t && xt > t - 7 * DAY; });
+    return { date: e.date, kg: win.reduce((a, x) => a + x.kg, 0) / win.length };
+  });
+
+  const line = arr => arr.map(e => `${X(e).toFixed(1)},${Y(e.kg).toFixed(1)}`).join(' ');
+  const gridKgs = [yLo + (yHi - yLo) * 0.15, (yLo + yHi) / 2, yHi - (yHi - yLo) * 0.15];
+  const fmtD = ds => new Date(ds + 'T00:00:00').toLocaleDateString('nl-BE', { day: 'numeric', month: 'short' });
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
+      {gridKgs.map((kg, i) => (
+        <g key={i}>
+          <line x1={PAD.l} y1={Y(kg)} x2={W - PAD.r} y2={Y(kg)} stroke="#f1f3f6" strokeWidth="1"/>
+          <text x={PAD.l - 4} y={Y(kg)} textAnchor="end" dominantBaseline="central" style={{ fontSize: '8px', fill: '#9ca3af' }}>{kg.toFixed(1)}</text>
+        </g>
+      ))}
+      <polyline points={line(entries)} fill="none" stroke="#c7d4ee" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"/>
+      {entries.map(e => <circle key={e.date} cx={X(e)} cy={Y(e.kg)} r="2" fill="#2f8bff"/>)}
+      <polyline points={line(avg)} fill="none" stroke="#f97316" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+      <text x={PAD.l} y={H - 3} style={{ fontSize: '8px', fill: '#9ca3af' }}>{fmtD(entries[0].date)}</text>
+      <text x={W - PAD.r} y={H - 3} textAnchor="end" style={{ fontSize: '8px', fill: '#9ca3af' }}>{fmtD(entries[entries.length - 1].date)}</text>
+    </svg>
+  );
+}
+
+function WeightCard({ userSlug, profileWeight, onUseInProfile }) {
+  const storeKey = `weight-log:${userSlug}`;
+  const [entries, setEntries] = useState(() => lsGet(storeKey) || []);
+  const [input, setInput] = useState('');
+  const [range, setRange] = useState(30);
+  useEffect(() => { setEntries(lsGet(`weight-log:${userSlug}`) || []); }, [userSlug]);
+
+  const sorted = useMemo(() => [...entries].sort((a, b) => a.date < b.date ? -1 : 1), [entries]);
+  const today = toDateStr(new Date());
+  const latest = sorted.length ? sorted[sorted.length - 1] : null;
+
+  function save(next) { setEntries(next); lsSet(storeKey, next); }
+  function logWeight() {
+    const kg = parseFloat(String(input).replace(',', '.'));
+    if (isNaN(kg) || kg <= 20 || kg > 400) return;
+    save([...sorted.filter(e => e.date !== today), { date: today, kg: Math.round(kg * 10) / 10 }].sort((a, b) => a.date < b.date ? -1 : 1));
+    setInput('');
+  }
+  function removeLatest() { if (latest) save(sorted.filter(e => e.date !== latest.date)); }
+
+  // Delta t.o.v. de meting die het dichtst bij N dagen geleden ligt (en minstens zo oud is)
+  function deltaSince(days) {
+    if (!latest || sorted.length < 2) return null;
+    const cutoff = addDays(latest.date, -days);
+    const past = [...sorted].reverse().find(e => e.date <= cutoff);
+    if (!past) return null;
+    return latest.kg - past.kg;
+  }
+  const d7 = deltaSince(7), d30 = deltaSince(30);
+  const fmtDelta = d => `${d > 0 ? '+' : ''}${(Math.round(d * 10) / 10).toFixed(1)} kg`;
+
+  const visible = useMemo(() => range === 0 ? sorted : sorted.filter(e => e.date >= addDays(today, -range)), [sorted, range, today]);
+  const showProfileSync = latest && profileWeight != null && Math.abs(latest.kg - profileWeight) >= 0.1 && onUseInProfile;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5"><Icon name="Weight" size={15} className="text-[#2f8bff]"/> Gewicht</h2>
+        {latest && <span className="text-xs text-gray-400">Laatste: <b className="text-gray-700">{latest.kg} kg</b>{latest.date !== today ? ` (${formatDateNice(latest.date)})` : ''}</span>}
+      </div>
+
+      <div className="flex gap-2 mb-3">
+        <input type="number" inputMode="decimal" min="0" step="0.1" value={input} onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && logWeight()}
+          placeholder={latest ? String(latest.kg) : 'bv. 80,5'}
+          className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"/>
+        <span className="self-center text-xs text-gray-400">kg</span>
+        <button onClick={logWeight} className="bg-orange-500 hover:bg-orange-600 text-white rounded-xl px-4 py-2 text-sm font-medium">
+          {sorted.some(e => e.date === today) ? 'Bijwerken' : 'Log'}
+        </button>
+      </div>
+
+      {(d7 != null || d30 != null) && (
+        <div className="flex gap-2 mb-3">
+          {d7 != null && <span className={`text-[11px] px-2 py-1 rounded-lg ${d7 <= 0 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>7 dagen: {fmtDelta(d7)}</span>}
+          {d30 != null && <span className={`text-[11px] px-2 py-1 rounded-lg ${d30 <= 0 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>30 dagen: {fmtDelta(d30)}</span>}
+        </div>
+      )}
+
+      {sorted.length > 0 && (
+        <>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex gap-1">
+              {[[30, '30d'], [90, '90d'], [0, 'Alles']].map(([r, lbl]) => (
+                <button key={r} onClick={() => setRange(r)}
+                  className={`text-[11px] px-2 py-0.5 rounded-full border ${range === r ? 'bg-[#2f8bff] text-white border-[#2f8bff]' : 'bg-white text-gray-500 border-gray-200'}`}>{lbl}</button>
+              ))}
+            </div>
+            <span className="text-[10px] text-gray-400 flex items-center gap-1"><span className="w-3 h-0.5 bg-orange-500 inline-block rounded"/> 7-daags gemiddelde</span>
+          </div>
+          <WeightChart entries={visible}/>
+        </>
+      )}
+
+      <div className="flex items-center justify-between mt-2">
+        {showProfileSync
+          ? <button onClick={() => onUseInProfile(latest.kg)} className="text-[11px] text-[#2f8bff] hover:text-[#2076e8] underline">Gebruik {latest.kg} kg in mijn profiel (nu {profileWeight} kg)</button>
+          : <span/>}
+        {latest && <button onClick={removeLatest} className="text-[11px] text-gray-300 hover:text-red-500 underline">Laatste meting verwijderen</button>}
+      </div>
+    </div>
+  );
+}
+
 // ─── Maaltijdmoment selector ──────────────────────────────────────────────────
 function MealTimeSelector({ active, onChange }) {
   return (
