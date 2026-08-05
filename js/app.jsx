@@ -17,6 +17,9 @@ function App() {
   const [showRepeatDay, setShowRepeatDay] = useState(false);
   const [showAddOverlay, setShowAddOverlay] = useState(false);
   const [addOverlayMeal, setAddOverlayMeal] = useState(MEAL_TIMES[0].key);
+  const [favorites, setFavorites] = useState([]);
+  const [recents, setRecents] = useState([]);
+  const [editEntry, setEditEntry] = useState(null);
 
   function openAddOverlay(meal){ setAddOverlayMeal(meal||MEAL_TIMES[0].key); setShowAddOverlay(true); }
 
@@ -39,6 +42,8 @@ function App() {
     if (p) { setProfile(p); setMacros(calcMacros(p)); }
     const cf = lsGet(`custom-foods:${userSlug}`) || [];
     setCustomFoods(cf);
+    setFavorites(lsGet(`favorites:${userSlug}`) || []);
+    setRecents(lsGet(`recent-foods:${userSlug}`) || []);
   }, [userSlug]);
 
   // Logboek laden
@@ -84,6 +89,38 @@ function App() {
     const newLog = log.filter(e => e.id !== id);
     setLog(newLog);
     lsSet(`daily-log:${userSlug}:${dateStr}`, newLog);
+  }
+
+  function updateLogEntry(id, patch) {
+    const newLog = log.map(e => e.id === id ? { ...e, ...patch } : e);
+    setLog(newLog);
+    lsSet(`daily-log:${userSlug}:${dateStr}`, newLog);
+  }
+
+  // Favorieten & recent gebruikt (identiteit: id, anders naam)
+  const foodKey = f => f.id != null ? String(f.id) : f.name;
+
+  function toggleFavorite(item) {
+    const { stagedId, grams, ...clean } = item;
+    const exists = favorites.some(f => foodKey(f) === foodKey(clean));
+    const updated = exists ? favorites.filter(f => foodKey(f) !== foodKey(clean)) : [clean, ...favorites];
+    setFavorites(updated);
+    lsSet(`favorites:${userSlug}`, updated);
+  }
+
+  function recordRecents(items) {
+    const clean = items.map(({ stagedId, grams, ...rest }) => rest);
+    const merged = [...clean, ...recents]
+      .filter((f, i, arr) => arr.findIndex(x => foodKey(x) === foodKey(f)) === i)
+      .slice(0, 20);
+    setRecents(merged);
+    lsSet(`recent-foods:${userSlug}`, merged);
+  }
+
+  // Gewicht uit de tracker overnemen in het profiel (herberekent de macro's)
+  function handleUseWeightInProfile(kg) {
+    if (!profile) return;
+    handleProfileComplete({ ...profile, weight: kg });
   }
 
   function addCustomFood(food) {
@@ -150,7 +187,9 @@ function App() {
       {showBreakdown && macros && <MacroBreakdownModal log={log} macros={macros} totals={totals} onClose={() => setShowBreakdown(false)} />}
       {showShoppingList && <ShoppingListModal userSlug={userSlug} initialDate={dateStr} onClose={() => setShowShoppingList(false)} />}
       {showRepeatDay && <RepeatDayModal dateStr={dateStr} count={log.length} onConfirm={repeatDayToWeekdays} onClose={() => setShowRepeatDay(false)} />}
-      {showAddOverlay && <AddFoodOverlay pool={searchPool} onAdd={(entries,meal)=>{addLogEntries(entries,meal);setShowAddOverlay(false);}} onSaveCustom={addCustomFood} onClose={()=>setShowAddOverlay(false)} initialMeal={addOverlayMeal} remaining={remaining}/>}
+      {showAddOverlay && <AddFoodOverlay pool={searchPool} onAdd={(entries,meal)=>{addLogEntries(entries,meal);setShowAddOverlay(false);}} onSaveCustom={addCustomFood} onClose={()=>setShowAddOverlay(false)} initialMeal={addOverlayMeal} remaining={remaining}
+        favorites={favorites} onToggleFavorite={toggleFavorite} recents={recents} onUsedFoods={recordRecents}/>}
+      {editEntry && <EditLogEntryModal entry={editEntry} onSave={updateLogEntry} onClose={()=>setEditEntry(null)}/>}
 
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[#182a48] border-b border-[#2b3e60] shadow-sm">
@@ -208,7 +247,9 @@ function App() {
                   <p className="text-[10px] text-gray-400 pt-2">BMR {macros.bmr} · TDEE {macros.tdee} kcal · {(MACRO_PROFILES[profile.macroProfile]||MACRO_PROFILES.normal).label}</p>
                 </div>
 
-                <DailyLogList log={log} onRemove={removeLogEntry} onOpenAdd={openAddOverlay}/>
+                <DailyLogList log={log} onRemove={removeLogEntry} onOpenAdd={openAddOverlay} onEdit={setEditEntry}/>
+
+                <WeightCard userSlug={userSlug} profileWeight={profile.weight} onUseInProfile={handleUseWeightInProfile}/>
 
                 {/* FAB — voeg toe aan dagboek */}
                 <button onClick={()=>openAddOverlay(MEAL_TIMES[0].key)}

@@ -1,11 +1,13 @@
 // ─── lib/ai.jsx — Gemini API proxy + AI-hulpfuncties ──────────────────────────
 // Sleutel zit server-side in /api/gemini (Vercel). Nooit in de client of de repo.
 
-async function callGemini(prompt, maxTokens = 1200, thinkingBudget = 0) {
+async function callGemini(prompt, maxTokens = 1200, thinkingBudget = 0, image = null) {
+  const payload = { prompt, maxTokens, thinkingBudget };
+  if (image) payload.image = { data: image.data, mimeType: image.mimeType };
   const res = await fetch('/api/gemini', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, maxTokens, thinkingBudget })
+    body: JSON.stringify(payload)
   });
   let data;
   try { data = await res.json(); }
@@ -48,6 +50,19 @@ async function estimateFoodWithAI(description) {
     `Schat de voedingswaarden van: "${description}". Geef ALLEEN een JSON object terug, niets anders, geen markdown: {"name":"...","kcal":number,"protein":number,"fat":number,"carbs":number,"portionDescription":"..."}`
   );
   return parseJsonFromAI(text);
+}
+
+// Foto van een maaltijd → lijst herkende onderdelen met geschatte macro's.
+// image = { data: base64 (zonder data:-prefix), mimeType } — zie fileToResizedBase64.
+async function estimateFoodFromPhoto(image, extra) {
+  const text = await callGemini(
+    `Je bent een voedingsexpert. Bekijk de foto en identificeer het eten of de drank.` +
+    (extra && extra.trim() ? ` Extra context van de gebruiker: "${extra.trim()}".` : '') +
+    ` Schat per herkend onderdeel de portiegrootte (zoals zichtbaar op de foto) en de voedingswaarden voor die portie. Gebruik Nederlandse namen. Geef ALLEEN JSON, niets anders: {"items":[{"name":"...","portionDescription":"bv. 150 g / 1 bord","kcal":number,"protein":number,"fat":number,"carbs":number}]}. Staat er geen eten of drank op de foto, geef dan {"items":[]}.`,
+    2500, 800, image
+  );
+  const parsed = parseJsonFromAI(text);
+  return Array.isArray(parsed.items) ? parsed.items.filter(it => it && it.name) : [];
 }
 
 async function suggestMealWithAI(targets, mealLabel) {

@@ -34,15 +34,31 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { prompt, maxTokens, thinkingBudget } = req.body || {};
+    const { prompt, maxTokens, thinkingBudget, image } = req.body || {};
     if (!prompt || typeof prompt !== 'string') {
       res.status(400).json({ error: 'Geen geldige prompt.' });
       return;
     }
 
+    // Optionele foto (voor maaltijdherkenning): { data: base64, mimeType }.
+    // De client verkleint foto's vooraf; hier enkel een harde bovengrens zodat
+    // niemand de functie (en het Gemini-quotum) misbruikt met enorme uploads.
+    const parts = [{ text: prompt }];
+    if (image) {
+      if (typeof image.data !== 'string' || !/^image\/(jpeg|png|webp)$/.test(image.mimeType || '')) {
+        res.status(400).json({ error: 'Ongeldige foto.' });
+        return;
+      }
+      if (image.data.length > 4_000_000) {
+        res.status(413).json({ error: 'Foto te groot. Probeer opnieuw.' });
+        return;
+      }
+      parts.push({ inlineData: { mimeType: image.mimeType, data: image.data } });
+    }
+
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
     const body = JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: [{ parts }],
       generationConfig: {
         maxOutputTokens: maxTokens || 1200,
         // "thinking" standaard uit (0) zodat korte antwoorden niet afgekapt raken.
