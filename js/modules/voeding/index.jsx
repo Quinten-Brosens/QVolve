@@ -438,7 +438,8 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
                 <p className="text-sm font-semibold text-gray-800 mb-0.5">Herken uit foto</p>
                 <p className="text-xs text-gray-500">Neem een foto van je bord en AI herkent het eten en schat de macro's.</p>
               </div>
-              <input ref={photoInputRef} type="file" accept="image/*" capture="environment" onChange={handlePhotoPick} className="hidden"/>
+              {/* Geen capture-attribuut: zo krijgt de gebruiker op mobiel de keuze camera óf galerij */}
+              <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoPick} className="hidden"/>
               {!photo ? (
                 <button onClick={() => photoInputRef.current && photoInputRef.current.click()}
                   className="w-full border-2 border-dashed border-gray-200 hover:border-[#2f8bff] rounded-xl py-6 text-sm text-gray-500 hover:text-[#2f8bff] flex flex-col items-center gap-2">
