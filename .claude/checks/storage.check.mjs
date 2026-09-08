@@ -93,6 +93,12 @@ check('een niet-quotafout meldt niets maar geeft wel false', () => {
   assert.equal(n, 0);
 });
 
+check('storageKeys geeft alle sleutels als array', () => {
+  const ctx = loadLibs(['js/lib/storage.jsx']);
+  ctx.lsSet('eerste', 1); ctx.lsSet('tweede', 2);
+  assert.deepEqual(plain(ctx.storageKeys()), ['eerste', 'tweede']);
+});
+
 check('storageUsageBytes telt sleutels en waarden in UTF-16', () => {
   const ctx = loadLibs(['js/lib/storage.jsx']);
   ctx.lsSet('ab', 1);   // sleutel 2 tekens + waarde "1" = 1 teken → 3 × 2 bytes

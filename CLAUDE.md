@@ -249,8 +249,9 @@ SetupWizard: gewicht/lengte/leeftijd/geslacht/activiteit/doel/macroprofiel
 
 ### Claude Code-hulpmiddelen (`.claude/`)
 
-Deze map is versiebeheerd (alleen `settings.local.json`, `cost-log.json` en
-`tools/` zijn genegeerd), zodat de hulpmiddelen mee in de repo zitten:
+Deze map is versiebeheerd (alleen `settings.local.json`, `cost-log.json`,
+`tools/` en `worktrees/` zijn genegeerd, net als `.superpowers/` in de
+projectroot), zodat de hulpmiddelen mee in de repo zitten:
 
 - `serve.ps1` — de lokale dev-server (zie hieronder).
 - `hooks/check-jsx.js` — PostToolUse-hook, de vervanger voor de ontbrekende

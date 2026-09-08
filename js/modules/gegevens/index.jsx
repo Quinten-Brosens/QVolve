@@ -4,11 +4,22 @@
 // alles wat van jou is als bestand meegeeft. Later (fase 4, AVG) komt hier ook
 // de verwijderknop bij.
 
+// Vertaalt het resultaat van exportUserData naar een Nederlandstalige melding.
+// Gedeeld door de banner en de exportkaart, zodat een mislukte export nooit
+// stil blijft — vooral in de banner niet: die verschijnt net op het moment
+// dat de app zelf zegt dat er data verloren gaat.
+function describeExportResult(r) {
+  return r.ok
+    ? { ok: true, text: `${r.filename} gedownload — ${r.keyCount} onderdelen bewaard.` }
+    : { ok: false, text: `Export mislukt: ${r.error}` };
+}
+
 // De banner verschijnt zodra één schrijfactie op een vol quotum stuit. Dat is
 // het moment waarop de app stil begon te liegen: het scherm toont de maaltijd,
 // de opslag heeft ze niet. Daarom staat de exportknop meteen in de melding.
 function StorageWarningBanner({ userName, userSlug }) {
   const [fout, setFout] = useState(null);
+  const [exportFout, setExportFout] = useState(null);
 
   useEffect(() => {
     // onStorageError geeft de opzegfunctie terug; die is meteen de cleanup.
@@ -19,7 +30,9 @@ function StorageWarningBanner({ userName, userSlug }) {
 
   function handleExport() {
     const r = exportUserData(userName, userSlug);
-    if (r.ok) setFout(null);
+    const uitkomst = describeExportResult(r);
+    if (r.ok) { setFout(null); setExportFout(null); }
+    else setExportFout(uitkomst.text);
   }
 
   return (
@@ -32,8 +45,10 @@ function StorageWarningBanner({ userName, userSlug }) {
           </h3>
           <p className="text-xs text-orange-800 mt-1">
             Dit toestel heeft geen ruimte meer voor Qvolve. Exporteer nu je gegevens als
-            back-up en maak daarna ruimte vrij, anders gaat verloren wat je hierna logt.
+            back-up en maak daarna ruimte vrij (de foto's bij je maaltijden nemen daarvan
+            verreweg het meeste in), anders gaat verloren wat je hierna logt.
           </p>
+          {exportFout && <p className="text-xs text-red-700 font-medium mt-2">{exportFout}</p>}
           <div className="flex gap-2 mt-3">
             <button onClick={handleExport}
               className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg px-3 py-1.5 text-xs font-medium">
@@ -54,10 +69,15 @@ function DataExportCard({ userName, userSlug }) {
   const [msg, setMsg] = useState(null);      // { ok: boolean, text: string }
   const [usage, setUsage] = useState(() => storageUsageBytes());
 
+  useEffect(() => {
+    // Ververs het cijfer ook bij een opslagmelding: exporteren zelf is
+    // read-only en verandert het gebruik dus nooit.
+    return onStorageError(() => setUsage(storageUsageBytes()));
+  }, []);
+
   function handleExport() {
     const r = exportUserData(userName, userSlug);
-    if (r.ok) setMsg({ ok: true, text: `${r.filename} gedownload — ${r.keyCount} onderdelen bewaard.` });
-    else setMsg({ ok: false, text: `Export mislukt: ${r.error}` });
+    setMsg(describeExportResult(r));
     setUsage(storageUsageBytes());
   }
 

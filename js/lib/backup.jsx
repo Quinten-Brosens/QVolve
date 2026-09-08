@@ -33,9 +33,8 @@ function readForExport(key) {
 function collectUserData(slug) {
   const data = {};
   try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key === null || !keyBelongsToUser(key, slug)) continue;
+    for (const key of storageKeys()) {
+      if (!keyBelongsToUser(key, slug)) continue;
       data[key] = readForExport(key);
     }
   } catch {}

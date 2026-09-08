@@ -42,11 +42,18 @@ function isQuotaError(e) {
 }
 
 const _storageErrorListeners = [];
+// Laatste melding, zodat een luisteraar die pas ná de fout opduikt (bv. de
+// banner op een scherm dat toen nog niet gemonteerd was) ze alsnog ziet.
+let _lastStorageError = null;
 
 // Abonneer op mislukte schrijfacties. Geeft een opzegfunctie terug, geschikt
-// als cleanup van een useEffect.
+// als cleanup van een useEffect. Was er al een fout vóór dit abonnement, dan
+// wordt die meteen nagespeeld — zo mist een laat gemonteerde luisteraar niets.
 function onStorageError(fn) {
   _storageErrorListeners.push(fn);
+  if (_lastStorageError) {
+    try { fn(_lastStorageError); } catch {}
+  }
   return function () {
     const i = _storageErrorListeners.indexOf(fn);
     if (i >= 0) _storageErrorListeners.splice(i, 1);
@@ -55,10 +62,25 @@ function onStorageError(fn) {
 
 function emitStorageError(key) {
   const melding = { key, at: Date.now() };
+  _lastStorageError = melding;
   // Kopie: een luisteraar mag zich tijdens de melding uitschrijven.
   for (const fn of _storageErrorListeners.slice()) {
     try { fn(melding); } catch {}
   }
+}
+
+// Alle sleutels in localStorage, als array. Gedeeld door storageUsageBytes()
+// hier en collectUserData() in backup.jsx, zodat de omgang met .length/.key(i)
+// niet dubbel staat.
+function storageKeys() {
+  const keys = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k !== null) keys.push(k);
+    }
+  } catch {}
+  return keys;
 }
 
 // Ruwe schatting van het opslaggebruik. Browsers rekenen in UTF-16, dus twee
@@ -66,9 +88,7 @@ function emitStorageError(key) {
 function storageUsageBytes() {
   let total = 0;
   try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k === null) continue;
+    for (const k of storageKeys()) {
       const v = localStorage.getItem(k) || '';
       total += (k.length + v.length) * 2;
     }

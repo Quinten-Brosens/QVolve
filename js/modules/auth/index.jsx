@@ -22,7 +22,7 @@ function loadUsers() {
   if (changed) lsSet(USERS_KEY, updated);
   return updated;
 }
-function saveUsers(users) { lsSet(USERS_KEY, users); }
+function saveUsers(users) { return lsSet(USERS_KEY, users); }
 
 function loadSession() {
   const s = lsGet(SESSION_KEY);
@@ -32,7 +32,7 @@ function loadSession() {
   if (!u) { lsDel(SESSION_KEY); return null; }
   return s.name;
 }
-function saveSession(name) { lsSet(SESSION_KEY, { name, ts: Date.now() }); }
+function saveSession(name) { return lsSet(SESSION_KEY, { name, ts: Date.now() }); }
 function clearSession() { lsDel(SESSION_KEY); }
 
 // ─── Admin paneel ─────────────────────────────────────────────────────────────
@@ -45,16 +45,19 @@ function AdminPanel({ onClose }) {
     if (!newName.trim()) return;
     if (users.find(u => u.name.toLowerCase() === newName.trim().toLowerCase())) { setMsg('Gebruiker bestaat al.'); return; }
     const updated = [...users, { name: newName.trim(), password: DEFAULT_PASSWORD, mustChangePw: true }];
-    saveUsers(updated); setUsers(updated); setNewName(''); setMsg(`✓ ${newName.trim()} toegevoegd`);
+    if (!saveUsers(updated)) { setMsg('Opslaan mislukt: opslag zit vol.'); return; }
+    setUsers(updated); setNewName(''); setMsg(`✓ ${newName.trim()} toegevoegd`);
   }
   function handleReset(name) {
     const updated = users.map(u => u.name === name ? { ...u, password: DEFAULT_PASSWORD, mustChangePw: true } : u);
-    saveUsers(updated); setUsers(updated); setMsg(`✓ Wachtwoord van ${name} gereset`);
+    if (!saveUsers(updated)) { setMsg('Opslaan mislukt: opslag zit vol.'); return; }
+    setUsers(updated); setMsg(`✓ Wachtwoord van ${name} gereset`);
   }
   function handleDelete(name) {
     if (!window.confirm(`${name} verwijderen?`)) return;
     const updated = users.filter(u => u.name !== name);
-    saveUsers(updated); setUsers(updated); setMsg(`✓ ${name} verwijderd`);
+    if (!saveUsers(updated)) { setMsg('Opslaan mislukt: opslag zit vol.'); return; }
+    setUsers(updated); setMsg(`✓ ${name} verwijderd`);
   }
 
   return (
@@ -106,7 +109,12 @@ function ChangePwScreen({ userName, onDone }) {
     if (pw1 === DEFAULT_PASSWORD) { setErr('Kies een ander wachtwoord dan het standaard.'); return; }
     setSaving(true);
     const updated = loadUsers().map(u => u.name === userName ? { ...u, password: pw1, mustChangePw: false } : u);
-    saveUsers(updated); setSaving(false); onDone();
+    if (!saveUsers(updated)) {
+      setSaving(false);
+      setErr('Opslaan mislukt: opslag zit vol. Exporteer je gegevens en maak ruimte vrij, en probeer dan opnieuw.');
+      return;
+    }
+    setSaving(false); onDone();
   }
 
   return (
