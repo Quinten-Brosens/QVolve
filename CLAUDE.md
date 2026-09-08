@@ -38,10 +38,11 @@ js/
   lib/
     utils.jsx         — lsGet/lsSet/lsDel, datum-helpers, normalizeMealTime,
                         groupByMeal, loadScript, humanizeCamError, React destructuring
+    image.jsx         — prepareMealPhoto (foto → 1024px JPEG + 160px thumbnail)
     macros.jsx        — MEAL_TIMES, ACTIVITY_FACTORS, GOALS, MACRO_PROFILES,
                         calcBMR, calcMacros, applyKcalToMacros, NEVO_VERSION
     ai.jsx            — callGemini, parseJsonFromAI, estimateFoodWithAI,
-                        suggestMealWithAI
+                        suggestMealWithAI, analyzeMealPhotoWithAI
     off.jsx           — mapOffProduct, offListToFoods, searchOpenFoodFacts,
                         lookupOffBarcode
     icons.jsx         — icons{} map + Icon({name,size,className}) component
@@ -54,9 +55,12 @@ js/
     dashboard/
       index.jsx       — CalorieSummary, MacroRing, MacroBreakdownModal,
                         DateNav, KcalAdjuster, MealTimeSelector
+    fotomodus/
+      index.jsx       — PhotoTab (maaltijd loggen vanaf een foto)
     voeding/
-      index.jsx       — BarcodeScanner, AddFoodOverlay (4 tabs: zoeken/manueel/
-                        AI-schatting/AI-voorstel), DailyLogList, RepeatDayModal
+      index.jsx       — BarcodeScanner, AddFoodOverlay (5 tabs: zoeken/foto/
+                        manueel/AI-schatting/AI-voorstel), DailyLogList,
+                        RepeatDayModal
     boodschappenlijst/
       index.jsx       — SHOP_CATEGORIES, SHOP_KEYWORDS, SYNONYMS, stemNL,
                         categorizeIngredient, parseIngredient, labelFor,
@@ -72,18 +76,20 @@ js/
 ### Laadvolgorde in qvolve.html (volgorde is cruciaal)
 1. `data/nevo-data.js` (plain JS, geen Babel)
 2. `js/lib/utils.jsx`
-3. `js/lib/macros.jsx`
-4. `js/lib/ai.jsx`
-5. `js/lib/off.jsx`
-6. `js/lib/icons.jsx`
-7. `js/modules/auth/index.jsx`
-8. `js/modules/onboarding/index.jsx`
-9. `js/modules/dashboard/index.jsx`
-10. `js/modules/voeding/index.jsx`
-11. `js/modules/boodschappenlijst/index.jsx`
-12. `js/modules/weekschema/index.jsx`
-13. `js/modules/training/index.jsx`
-14. `js/app.jsx`
+3. `js/lib/image.jsx`
+4. `js/lib/macros.jsx`
+5. `js/lib/ai.jsx`
+6. `js/lib/off.jsx`
+7. `js/lib/icons.jsx`
+8. `js/modules/auth/index.jsx`
+9. `js/modules/onboarding/index.jsx`
+10. `js/modules/dashboard/index.jsx`
+11. `js/modules/fotomodus/index.jsx` (vóór voeding: `AddFoodOverlay` rendert `PhotoTab`)
+12. `js/modules/voeding/index.jsx`
+13. `js/modules/boodschappenlijst/index.jsx`
+14. `js/modules/weekschema/index.jsx`
+15. `js/modules/training/index.jsx`
+16. `js/app.jsx`
 
 ## Kleurenschema
 
@@ -147,6 +153,8 @@ blauw + oranje accenten.
 - `weekschema-prefs:{slug}` — antwoorden vragenlijst
 - `weekschema-plan:{slug}` — gegenereerd weekschema
 - `shop-state:{slug}:{start}:{end}` — boodschappenlijst staat (afgevinkt, extra's)
+- `meal-photos:{slug}:{datum}` — miniaturen uit de fotomodus, `{ photoId: dataUrl }`
+  (één foto per `photoId`, ook als er meerdere items uit herkend zijn)
 
 (`slug` = naam via `slugifyName()`, bv. "quinten-brosens".)
 
@@ -158,16 +166,26 @@ MacroBreakdownModal (taartdiagram + top-5 per macro), DateNav, KcalAdjuster,
 MealTimeSelector.
 
 ### voeding (`js/modules/voeding/index.jsx`)
-- **AddFoodOverlay**: fullscreen overlay met 4 tabs:
+- **AddFoodOverlay**: fullscreen overlay met 5 tabs:
   - *Zoeken* — NEVO + eigen producten (instant) + Open Food Facts (debounced)
     + barcodescan (`html5-qrcode`, lazy van CDN)
-  - *Zelf ingeven* — handmatige invoer per 100g, opslaan in eigen lijst
+  - *Foto* — `PhotoTab` uit de fotomodus-module (zie hieronder)
+  - *Zelf* — handmatige invoer per 100g, opslaan in eigen lijst
   - *AI-schatting* — vrije tekstbeschrijving → Gemini schat macro's
   - *AI Voorstel* — doel-macro's (standaard = resterend voor die dag) →
     Gemini stelt een maaltijd voor
 - **DailyLogList**: dagboek gegroepeerd per eetmoment, + knop per maaltijd
 - **RepeatDayModal**: huidige dag kopiëren naar weekdagen voor X weken
 - **BarcodeScanner**: camera-overlay via html5-qrcode
+
+### fotomodus (`js/modules/fotomodus/index.jsx`)
+`PhotoTab` — foto van een maaltijd → Gemini herkent de losse gerechten. De
+native camera van de telefoon legt vast (`<input type="file" capture>`), niet
+een eigen viewfinder. De AI geeft per item de macro's **per 100 g** plus een
+geschat gewicht; het gram-veld herrekent lokaal, zoals bij NEVO-producten. Elk
+item is aan/uit te vinken. Bevestigen levert logregels met `source: 'ai-photo'`,
+een gedeeld `photoId` en de miniatuur in `_thumb` — die laatste wordt in
+`app.jsx` van de regel gestript en apart opgeslagen.
 
 ### boodschappenlijst (`js/modules/boodschappenlijst/index.jsx`)
 Aggregeert gelogde voeding over datumbereik. Groepeert per supermarkt-categorie
@@ -199,7 +217,7 @@ SetupWizard: gewicht/lengte/leeftijd/geslacht/activiteit/doel/macroprofiel
 - Omdat alles in `localStorage` zit, is data niet gedeeld tussen apparaten of
   gebruikers. Elk toestel staat op zichzelf.
 - Service worker kan oude versies cachen; daarom network-first voor HTML/JS.
-  Bump `CACHE` in `sw.js` bij grote wijzigingen (nu `qvolve-v4`).
+  Bump `CACHE` in `sw.js` bij grote wijzigingen (nu `qvolve-v7`).
 - Een centrale database (bv. Firebase) zou nodig zijn voor gedeelde gebruikers
   of synchronisatie — bewust nog niet gedaan om het simpel en gratis te houden.
 
