@@ -5,25 +5,20 @@ te pikken.
 
 ## AI foto-modus — echte herkenning nog testen
 
-**Status:** code af en gepusht op `feature/ai-foto-modus` (9 commits). Nog niet
-gemerged naar `main`.
+**Status:** gemerged naar `main` en live op https://q-volve.vercel.app.
 
-De hele flow is geverifieerd met een **gestubde** AI-respons: tabs, itemlijst,
-gram-herberekening, opslag van de miniatuur en het opruimen ervan. Wat nog nooit
-gedraaid heeft, is de echte call naar Gemini met een foto. Dat kan niet lokaal —
-de dev-server serveert geen serverless functies en geeft 501 op `/api/gemini`.
+De keten is end-to-end bewezen op productie: een foto zonder eten leverde een
+echt Gemini-antwoord op ("Er is geen voedsel zichtbaar op de afbeelding") en de
+juiste melding in de UI. Dat dekt proxy → beeld → model → JSON → weergave.
 
-**Zo test je het:**
+Daarbij kwam één bug boven die lokaal onzichtbaar was: de client stuurde
+`image.base64` terwijl de proxy `image.data` verwacht, waardoor élke foto werd
+geweigerd. Opgelost in `eacd92f`. De les: de dev-server geeft 501 vóór de
+validatie, dus de naad tussen client en proxy is lokaal niet te testen.
 
-1. Open de Vercel preview-URL van `feature/ai-foto-modus` op een telefoon.
-2. Inloggen → FAB → tab **Foto** → foto van een echte maaltijd.
-
-**Waar het op vastloopt als er iets mist:**
-
-| Melding | Oorzaak |
-|---|---|
-| "Server: GEMINI_API_KEY ontbreekt" | De sleutel staat niet aan voor de **Preview**-omgeving in Vercel, alleen voor Production |
-| 403 / "Origin niet toegestaan" | `ALLOWED_ORIGINS` staat ingesteld en kent het preview-domein niet |
+**Wat nog openstaat: de nauwkeurigheid op echt eten.** Er is nog nooit een foto
+van een echte maaltijd door gegaan. Te testen door de besloten testgroep:
+inloggen → FAB → tab **Foto** → foto van een bord eten.
 
 **Waar je op let bij het testen:**
 
@@ -36,11 +31,10 @@ de dev-server serveert geen serverless functies en geeft 501 op `/api/gemini`.
 Blijkt de schatting structureel mis, dan zit de aanpassing in de prompt van
 `analyzeMealPhotoWithAI` (`js/lib/ai.jsx`), niet in de UI eromheen.
 
-**Wie test:** een besloten groep testers, op de preview-URL. De feature is er
+**Wie test:** een besloten groep testers, op de live site. De feature is er
 gekomen op vraag van een van hen.
 
-Spec en plan staan op de branch, nog niet op `main`:
-`docs/superpowers/specs/2026-09-08-ai-foto-modus-design.md` en
+Spec en plan: `docs/superpowers/specs/2026-09-08-ai-foto-modus-design.md` en
 `docs/superpowers/plans/2026-09-08-ai-foto-modus.md`.
 
 ## training-module uitbouwen
