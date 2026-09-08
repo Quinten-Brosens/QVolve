@@ -1,12 +1,17 @@
 // ─── lib/ai.jsx — Gemini API proxy + AI-hulpfuncties ──────────────────────────
 // Sleutel zit server-side in /api/gemini (Vercel). Nooit in de client of de repo.
 
-async function callGemini(prompt, maxTokens = 1200, thinkingBudget = 0) {
+async function callGemini(prompt, maxTokens = 1200, thinkingBudget = 0, image = null) {
+  const payload = { prompt, maxTokens, thinkingBudget };
+  if (image) payload.image = image;
   const res = await fetch('/api/gemini', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, maxTokens, thinkingBudget })
+    body: JSON.stringify(payload)
   });
+  // De lokale dev-server kent geen serverless functies. Zonder deze regel
+  // krijgt de gebruiker daar een cryptische parse-fout te zien.
+  if (res.status === 501) throw new Error('AI werkt niet op de lokale dev-server. Test dit op de Vercel-preview.');
   let data;
   try { data = await res.json(); }
   catch { throw new Error('Geen geldig antwoord van de AI-server (HTTP ' + res.status + ').'); }
@@ -61,4 +66,32 @@ async function suggestMealWithAI(targets, mealLabel) {
     3000, 1500
   );
   return parseJsonFromAI(text);
+}
+
+// Foto van een bord → losse herkende items. De macro's komen PER 100 GRAM
+// terug, met daarnaast het geschatte gewicht op de foto. Die twee door elkaar
+// halen is de meest waarschijnlijke fout van het model en achteraf niet meer
+// te zien, dus de prompt zegt het expliciet en twee keer.
+async function analyzeMealPhotoWithAI(image) {
+  const text = await callGemini(
+    'Je krijgt een foto van een maaltijd. Benoem in het Nederlands de afzonderlijke ' +
+    'gerechten of ingrediënten die je herkent, maximaal 8. Schat per item hoeveel gram ' +
+    'ervan op de foto ligt ("grams"). Geef de voedingswaarden PER 100 GRAM van dat ' +
+    'ingrediënt, dus NIET voor de geschatte portie. Staat er geen eten op de foto, geef ' +
+    'dan een lege items-lijst. Geef ALLEEN JSON, geen markdown: ' +
+    '{"items":[{"name":"...","grams":number,"kcal":number,"protein":number,"fat":number,"carbs":number}],"note":"korte opmerking over de schatting"}',
+    2000, 1024, image
+  );
+  const data = parseJsonFromAI(text);
+  const items = (Array.isArray(data.items) ? data.items : [])
+    .filter(it => it && it.name)
+    .map(it => ({
+      name: String(it.name),
+      grams: Math.max(0, Number(it.grams) || 0),
+      kcal: Math.max(0, Number(it.kcal) || 0),
+      protein: Math.max(0, Number(it.protein) || 0),
+      fat: Math.max(0, Number(it.fat) || 0),
+      carbs: Math.max(0, Number(it.carbs) || 0),
+    }));
+  return { items, note: data.note ? String(data.note) : '' };
 }

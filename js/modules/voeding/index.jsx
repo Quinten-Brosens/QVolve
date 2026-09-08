@@ -239,8 +239,10 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
 
       <div className="bg-white border-b border-gray-100 px-4 py-2 shrink-0">
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-          {[{ id: 'search', label: 'Zoeken' }, { id: 'manual', label: 'Zelf ingeven' }, { id: 'describe', label: 'AI-schatting' }, { id: 'suggest', label: 'AI Voorstel' }].map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} className={`flex-1 py-1 rounded-md text-xs font-medium transition-colors ${tab === t.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>{t.label}</button>
+          {[{ id: 'search', label: 'Zoeken' }, { id: 'photo', label: 'Foto', icon: 'Camera' }, { id: 'manual', label: 'Zelf' }, { id: 'describe', label: 'Schatting' }, { id: 'suggest', label: 'Voorstel' }].map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} className={`flex-1 py-1 rounded-md text-[11px] font-medium transition-colors flex items-center justify-center gap-1 ${tab === t.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>
+              {t.icon && <Icon name={t.icon} size={11}/>}{t.label}
+            </button>
           ))}
         </div>
       </div>
@@ -322,6 +324,13 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
               <p className="text-sm text-gray-300 text-center pt-8">Zoek een voedingsmiddel hierboven of scan een barcode.</p>
             )}
           </div>
+        )}
+
+        {tab === 'photo' && (
+          <PhotoTab
+            mealLabel={MEAL_TIMES.find(m => m.key === activeMeal)?.label || 'maaltijd'}
+            onConfirm={entries => { onAdd(entries, activeMeal); onClose(); }}
+          />
         )}
 
         {tab === 'manual' && (
@@ -439,7 +448,7 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
 }
 
 // ─── DailyLogList ─────────────────────────────────────────────────────────────
-function DailyLogList({ log, onRemove, onOpenAdd }) {
+function DailyLogList({ log, onRemove, onOpenAdd, mealPhotos = {} }) {
   const grouped = useMemo(() => groupByMeal(log), [log]);
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
@@ -464,6 +473,9 @@ function DailyLogList({ log, onRemove, onOpenAdd }) {
                   {entries.map(e => (
                     <div key={e.id} className="py-1 border-b border-gray-50 last:border-0">
                       <div className="flex items-center justify-between">
+                        {e.photoId && mealPhotos[e.photoId] && (
+                          <img src={mealPhotos[e.photoId]} alt="" className="w-7 h-7 rounded object-cover mr-2 shrink-0" />
+                        )}
                         <p className="text-sm text-gray-800 flex-1 min-w-0">{e.name}{e.grams ? ` · ${e.grams}g` : ''}</p>
                         <div className="flex items-center gap-2 ml-2">
                           <span className="text-xs text-gray-400">{Math.round(e.kcal)} kcal</span>
