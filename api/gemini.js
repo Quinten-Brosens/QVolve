@@ -11,6 +11,11 @@
 
 const GEMINI_MODEL = 'gemini-2.5-flash';
 
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+// ~3,5 MB base64 ≈ 2,6 MB beeld. Vercel kapt requests boven ~4,5 MB af;
+// deze grens geeft een nette fout in plaats van een afgebroken verbinding.
+const MAX_IMAGE_CHARS = 3_500_000;
+
 const ALLOWED = (process.env.ALLOWED_ORIGINS || '')
   .split(',').map(s => s.trim()).filter(Boolean);
 
@@ -34,15 +39,31 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { prompt, maxTokens, thinkingBudget } = req.body || {};
+    const { prompt, maxTokens, thinkingBudget, image } = req.body || {};
     if (!prompt || typeof prompt !== 'string') {
       res.status(400).json({ error: 'Geen geldige prompt.' });
       return;
     }
 
+    // Eén afbeelding is optioneel. Staat ze er, dan gaat ze vóór de tekst:
+    // dat is wat Google aanraadt bij een enkel beeld.
+    const parts = [];
+    if (image) {
+      if (typeof image.data !== 'string' || !ALLOWED_IMAGE_TYPES.includes(image.mimeType)) {
+        res.status(400).json({ error: 'Ongeldige afbeelding meegestuurd.' });
+        return;
+      }
+      if (image.data.length > MAX_IMAGE_CHARS) {
+        res.status(413).json({ error: 'De foto is te groot. Probeer een kleinere foto.' });
+        return;
+      }
+      parts.push({ inlineData: { mimeType: image.mimeType, data: image.data } });
+    }
+    parts.push({ text: prompt });
+
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
     const body = JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: [{ parts }],
       generationConfig: {
         maxOutputTokens: maxTokens || 1200,
         // "thinking" standaard uit (0) zodat korte antwoorden niet afgekapt raken.
