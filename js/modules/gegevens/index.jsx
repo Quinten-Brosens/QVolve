@@ -4,6 +4,52 @@
 // alles wat van jou is als bestand meegeeft. Later (fase 4, AVG) komt hier ook
 // de verwijderknop bij.
 
+// De banner verschijnt zodra één schrijfactie op een vol quotum stuit. Dat is
+// het moment waarop de app stil begon te liegen: het scherm toont de maaltijd,
+// de opslag heeft ze niet. Daarom staat de exportknop meteen in de melding.
+function StorageWarningBanner({ userName, userSlug }) {
+  const [fout, setFout] = useState(null);
+
+  useEffect(() => {
+    // onStorageError geeft de opzegfunctie terug; die is meteen de cleanup.
+    return onStorageError(setFout);
+  }, []);
+
+  if (!fout) return null;
+
+  function handleExport() {
+    const r = exportUserData(userName, userSlug);
+    if (r.ok) setFout(null);
+  }
+
+  return (
+    <div className="rounded-2xl border border-orange-300 bg-orange-50 p-4">
+      <div className="flex items-start gap-3">
+        <span className="text-orange-500 shrink-0 mt-0.5"><Icon name="AlertTriangle" size={18}/></span>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-orange-900">
+            Opslag vol — je laatste wijziging is niet bewaard
+          </h3>
+          <p className="text-xs text-orange-800 mt-1">
+            Dit toestel heeft geen ruimte meer voor Qvolve. Exporteer nu je gegevens als
+            back-up en maak daarna ruimte vrij, anders gaat verloren wat je hierna logt.
+          </p>
+          <div className="flex gap-2 mt-3">
+            <button onClick={handleExport}
+              className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg px-3 py-1.5 text-xs font-medium">
+              <Icon name="Download" size={13}/> Exporteer nu
+            </button>
+            <button onClick={() => setFout(null)}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-orange-800 border border-orange-300">
+              Sluiten
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DataExportCard({ userName, userSlug }) {
   const [msg, setMsg] = useState(null);      // { ok: boolean, text: string }
   const [usage, setUsage] = useState(() => storageUsageBytes());

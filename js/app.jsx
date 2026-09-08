@@ -192,6 +192,10 @@ function App() {
       {/* Content */}
       <main className="max-w-2xl mx-auto px-4 pt-4 pb-24">
 
+        <div className="mb-4 empty:mb-0">
+          <StorageWarningBanner userName={userName} userSlug={userSlug}/>
+        </div>
+
         {tab === 'voeding' && (
           <>
             {(!profile || editingProfile) && (
