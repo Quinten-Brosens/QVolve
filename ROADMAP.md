@@ -36,7 +36,11 @@ de dev-server serveert geen serverless functies en geeft 501 op `/api/gemini`.
 Blijkt de schatting structureel mis, dan zit de aanpassing in de prompt van
 `analyzeMealPhotoWithAI` (`js/lib/ai.jsx`), niet in de UI eromheen.
 
-Spec en plan: `docs/superpowers/specs/2026-09-08-ai-foto-modus-design.md` en
+**Wie test:** een besloten groep testers, op de preview-URL. De feature is er
+gekomen op vraag van een van hen.
+
+Spec en plan staan op de branch, nog niet op `main`:
+`docs/superpowers/specs/2026-09-08-ai-foto-modus-design.md` en
 `docs/superpowers/plans/2026-09-08-ai-foto-modus.md`.
 
 ## training-module uitbouwen
