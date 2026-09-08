@@ -39,6 +39,11 @@ Overgenomen uit de spec en uit `CLAUDE.md`. Elke taak valt hieronder.
   Ze moeten in een kale `node`-vm draaibaar blijven; dat is wat taak 1 en 2 test.
 - **Publieke functies in die twee modules zijn `function`-declaraties,** geen `const fn = () => …`.
   Alleen `function`-declaraties komen als property op de vm-context terecht en zijn dus testbaar.
+- **Vergelijk een object dat uit de vm komt nooit rechtstreeks met een literal.** De vm is een eigen
+  realm met een eigen `Object.prototype`, en `node:assert/strict` vergelijkt dat prototype mee — een
+  correcte implementatie faalt dan met "same structure but not reference-equal". Haal de waarde eerst
+  door `plain()` uit `harness.mjs`. Primitieven (getallen, strings, booleans) en arrays die het
+  controlescript zelf aanmaakt, hebben dat niet nodig.
 
 ## Uitgangssituatie en aannames
 
@@ -183,6 +188,14 @@ export function makeLocalStorage({ maxBytes = Infinity } = {}) {
   };
 }
 
+// Waarden die uit de vm komen, hebben een ánder Object.prototype dan literals
+// in het controlescript. node:assert/strict vergelijkt dat prototype mee, dus
+// deepEqual op een vm-object faalt met "same structure but not reference-equal",
+// hoe correct de code ook is. plain() haalt de waarde over naar deze realm.
+export function plain(v) {
+  return v === undefined ? undefined : JSON.parse(JSON.stringify(v));
+}
+
 export function loadLibs(files, { localStorage } = {}) {
   const ctx = {
     localStorage: localStorage || makeLocalStorage(),
@@ -206,7 +219,7 @@ Maak `.claude/checks/storage.check.mjs`:
 
 ```js
 import assert from 'node:assert/strict';
-import { loadLibs, makeLocalStorage } from './harness.mjs';
+import { loadLibs, makeLocalStorage, plain } from './harness.mjs';
 
 let ok = 0;
 function check(naam, fn) {
@@ -219,7 +232,7 @@ console.log('storage.jsx');
 check('lsSet slaat op, lsGet leest terug', () => {
   const ctx = loadLibs(['js/lib/storage.jsx']);
   assert.equal(ctx.lsSet('a', { n: 1 }), true);
-  assert.deepEqual(ctx.lsGet('a'), { n: 1 });
+  assert.deepEqual(plain(ctx.lsGet('a')), { n: 1 });
 });
 
 check('lsGet geeft null voor een onbekende sleutel', () => {
@@ -560,7 +573,7 @@ Maak `.claude/checks/backup.check.mjs`:
 
 ```js
 import assert from 'node:assert/strict';
-import { loadLibs } from './harness.mjs';
+import { loadLibs, plain } from './harness.mjs';
 
 const LIBS = ['js/lib/storage.jsx', 'js/lib/utils.jsx', 'js/lib/backup.jsx'];
 
@@ -628,7 +641,7 @@ check('de export bevat geen wachtwoordenlijst en geen sessie', () => {
 
 check('waarden komen geparseerd mee, niet als tekst', () => {
   const data = gevuldeOpslag().collectUserData('jan-jansen');
-  assert.deepEqual(data['daily-log:jan-jansen:2026-09-08'], [{ name: 'Havermout', kcal: 350 }]);
+  assert.deepEqual(plain(data['daily-log:jan-jansen:2026-09-08']), [{ name: 'Havermout', kcal: 350 }]);
 });
 
 check('onleesbare JSON gaat als ruwe tekst mee in plaats van verloren', () => {
@@ -643,13 +656,17 @@ check('buildExport zet app, versie, tijdstip en gebruiker in de kop', () => {
   assert.equal(p.app, 'Qvolve');
   assert.equal(p.exportVersion, 1);
   assert.equal(p.exportedAt, '2026-09-08T10:00:00.000Z');
-  assert.deepEqual(p.user, { name: 'Jan Jansen', slug: 'jan-jansen' });
+  assert.deepEqual(plain(p.user), { name: 'Jan Jansen', slug: 'jan-jansen' });
   assert.equal(Object.keys(p.data).length, 8);
 });
 
 check('de export overleeft JSON.stringify zonder verlies', () => {
   const p = gevuldeOpslag().buildExport('Jan Jansen', 'jan-jansen', new Date('2026-09-08T10:00:00Z'));
-  assert.deepEqual(JSON.parse(JSON.stringify(p)), p);
+  const heen = JSON.parse(JSON.stringify(p));   // precies wat downloadJson wegschrijft
+  assert.equal(heen.user.slug, 'jan-jansen');
+  assert.equal(Object.keys(heen.data).length, 8);
+  assert.deepEqual(heen.data['daily-log:jan-jansen:2026-09-08'], [{ name: 'Havermout', kcal: 350 }]);
+  assert.deepEqual(heen.data['meal-photos:jan-jansen:2026-09-08'], { p1: 'data:image/jpeg;base64,AAA' });
 });
 
 check('de bestandsnaam draagt slug en datum', () => {
@@ -661,7 +678,7 @@ check('de bestandsnaam draagt slug en datum', () => {
 check('een gebruiker zonder data levert een lege maar geldige export', () => {
   const ctx = loadLibs(LIBS);
   const p = ctx.buildExport('Nieuw', 'nieuw', new Date('2026-09-08T10:00:00Z'));
-  assert.deepEqual(p.data, {});
+  assert.deepEqual(plain(p.data), {});
   assert.equal(p.exportVersion, 1);
 });
 
