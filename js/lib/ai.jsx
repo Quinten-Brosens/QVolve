@@ -73,6 +73,10 @@ async function suggestMealWithAI(targets, mealLabel) {
 // halen is de meest waarschijnlijke fout van het model en achteraf niet meer
 // te zien, dus de prompt zegt het expliciet en twee keer.
 async function analyzeMealPhotoWithAI(image) {
+  // prepareMealPhoto levert { base64, mimeType }; de proxy verwacht
+  // { data, mimeType } — dezelfde vorm als Gemini's inlineData. Hier vertalen,
+  // zodat beide kanten hun eigen naamgeving houden.
+  const payloadImage = { mimeType: image.mimeType, data: image.base64 };
   const text = await callGemini(
     'Je krijgt een foto van een maaltijd. Benoem in het Nederlands de afzonderlijke ' +
     'gerechten of ingrediënten die je herkent, maximaal 8. Schat per item hoeveel gram ' +
@@ -80,7 +84,7 @@ async function analyzeMealPhotoWithAI(image) {
     'ingrediënt, dus NIET voor de geschatte portie. Staat er geen eten op de foto, geef ' +
     'dan een lege items-lijst. Geef ALLEEN JSON, geen markdown: ' +
     '{"items":[{"name":"...","grams":number,"kcal":number,"protein":number,"fat":number,"carbs":number}],"note":"korte opmerking over de schatting"}',
-    2000, 1024, image
+    2000, 1024, payloadImage
   );
   const data = parseJsonFromAI(text);
   const items = (Array.isArray(data.items) ? data.items : [])
