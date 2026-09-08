@@ -1,5 +1,11 @@
-# Claude Code lokale instellingen
-.claude/
+# Claude Code — lokale, machine-specifieke bestanden
+# (de rest van .claude/ is bewust wél versiebeheerd: hooks, skills, agents)
+.claude/settings.local.json
+.claude/cost-log.json
+.claude/tools/
+
+# Playwright MCP-uitvoer (screenshots, console-logs)
+.playwright-mcp/
 
 # OS-bestanden
 Thumbs.db

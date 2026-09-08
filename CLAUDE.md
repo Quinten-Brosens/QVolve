@@ -212,6 +212,26 @@ SetupWizard: gewicht/lengte/leeftijd/geslacht/activiteit/doel/macroprofiel
 - Elke module is zelfstandig te bewerken; zorg dat globals die je gebruikt
   beschikbaar zijn in eerder geladen bestanden (zie laadvolgorde hierboven).
 
+### Claude Code-hulpmiddelen (`.claude/`)
+
+Deze map is versiebeheerd (alleen `settings.local.json`, `cost-log.json` en
+`tools/` zijn genegeerd), zodat de hulpmiddelen mee in de repo zitten:
+
+- `serve.ps1` — de lokale dev-server (zie hieronder).
+- `hooks/check-jsx.js` — PostToolUse-hook, de vervanger voor de ontbrekende
+  build-stap. Compileert elk gewijzigd `.jsx` met dezelfde Babel-versie en
+  presets als `qvolve.html`, controleert `.js` met de V8-parser, en meldt een
+  `js/**/*.jsx` dat niet als `<script>` in `qvolve.html` staat. Babel-standalone
+  wordt één keer gedownload naar `.claude/tools/`; zonder netwerk slaat de hook
+  de jsx-controle over in plaats van te blokkeren.
+- `skills/preview/` — `/preview`: server starten, app in de browser laden,
+  console-fouten nakijken. Bevat ook het recept om de login over te slaan.
+- `skills/deploy/` — `/deploy`: `CACHE` in `sw.js` bumpen, committen, pushen.
+- `agents/qvolve-reviewer.md` — reviewer die de projectregels kent (geen
+  build-stap, globals en laadvolgorde, kleurenschema, Gemini-model, localStorage-keys).
+- `.mcp.json` in de root voegt **context7** toe voor live documentatie van
+  Vercel, Gemini, Open Food Facts en html5-qrcode.
+
 ### Lokaal testen — altijd via een webserver, nooit via `file://`
 
 - Open `qvolve.html` **niet** door te dubbelklikken (`file:///...`). Babel haalt
