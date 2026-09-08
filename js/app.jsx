@@ -237,6 +237,8 @@ function App() {
 
                 <DailyLogList log={log} onRemove={removeLogEntry} onOpenAdd={openAddOverlay} mealPhotos={mealPhotos}/>
 
+                <DataExportCard userName={userName} userSlug={userSlug}/>
+
                 {/* FAB — voeg toe aan dagboek */}
                 <button onClick={()=>openAddOverlay(MEAL_TIMES[0].key)}
                   className="fixed bottom-20 right-4 z-30 w-14 h-14 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white rounded-full shadow-xl flex items-center justify-center transition-transform">
