@@ -1,14 +1,6 @@
-// ─── lib/utils.jsx — localStorage, datum, sessie, misc helpers ────────────────
+// ─── lib/utils.jsx — datum, sessie, misc helpers ─────────────────────────────
+// localStorage-helpers staan in lib/storage.jsx (eerder geladen).
 const { useState, useEffect, useMemo, useCallback, useRef } = React;
-
-// localStorage helpers
-function lsGet(key) {
-  try { const v = localStorage.getItem(key); return v !== null ? JSON.parse(v) : null; } catch { return null; }
-}
-function lsSet(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
-}
-function lsDel(key) { try { localStorage.removeItem(key); } catch {} }
 
 // Vraag de browser om opslag niet zomaar te wissen.
 function requestPersistentStorage() {

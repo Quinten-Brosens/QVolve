@@ -36,8 +36,12 @@ data/
   nevo-data.js        — NEVO_DATA array, 2328 items (geladen vóór alle jsx)
 js/
   lib/
-    utils.jsx         — lsGet/lsSet/lsDel, datum-helpers, normalizeMealTime,
-                        groupByMeal, loadScript, humanizeCamError, React destructuring
+    storage.jsx       — lsGet/lsSet/lsDel, isQuotaError, onStorageError,
+                        storageUsageBytes, formatBytes
+    utils.jsx         — datum-helpers, normalizeMealTime, groupByMeal, loadScript,
+                        humanizeCamError, React destructuring
+    backup.jsx        — keyBelongsToUser, collectUserData, buildExport,
+                        buildExportFilename, downloadJson, exportUserData
     image.jsx         — prepareMealPhoto (foto → 1024px JPEG + 160px thumbnail)
     macros.jsx        — MEAL_TIMES, ACTIVITY_FACTORS, GOALS, MACRO_PROFILES,
                         calcBMR, calcMacros, applyKcalToMacros, NEVO_VERSION
@@ -70,26 +74,31 @@ js/
                         printWeekSchema, ImportSchemaModal, WeekSchemaPanel
     training/
       index.jsx       — TrainingPlaceholder (nog uit te bouwen)
+    gegevens/
+      index.jsx       — StorageWarningBanner, DataExportCard
   app.jsx             — App root: state, routing tussen tabs, FAB-knop
 ```
 
 ### Laadvolgorde in qvolve.html (volgorde is cruciaal)
 1. `data/nevo-data.js` (plain JS, geen Babel)
-2. `js/lib/utils.jsx`
-3. `js/lib/image.jsx`
-4. `js/lib/macros.jsx`
-5. `js/lib/ai.jsx`
-6. `js/lib/off.jsx`
-7. `js/lib/icons.jsx`
-8. `js/modules/auth/index.jsx`
-9. `js/modules/onboarding/index.jsx`
-10. `js/modules/dashboard/index.jsx`
-11. `js/modules/fotomodus/index.jsx` (vóór voeding: `AddFoodOverlay` rendert `PhotoTab`)
-12. `js/modules/voeding/index.jsx`
-13. `js/modules/boodschappenlijst/index.jsx`
-14. `js/modules/weekschema/index.jsx`
-15. `js/modules/training/index.jsx`
-16. `js/app.jsx`
+2. `js/lib/storage.jsx`
+3. `js/lib/utils.jsx`
+4. `js/lib/backup.jsx`
+5. `js/lib/image.jsx`
+6. `js/lib/macros.jsx`
+7. `js/lib/ai.jsx`
+8. `js/lib/off.jsx`
+9. `js/lib/icons.jsx`
+10. `js/modules/auth/index.jsx`
+11. `js/modules/onboarding/index.jsx`
+12. `js/modules/dashboard/index.jsx`
+13. `js/modules/fotomodus/index.jsx` (vóór voeding: `AddFoodOverlay` rendert `PhotoTab`)
+14. `js/modules/voeding/index.jsx`
+15. `js/modules/boodschappenlijst/index.jsx`
+16. `js/modules/weekschema/index.jsx`
+17. `js/modules/training/index.jsx`
+18. `js/modules/gegevens/index.jsx`
+19. `js/app.jsx`
 
 ## Kleurenschema
 
@@ -158,6 +167,12 @@ blauw + oranje accenten.
 
 (`slug` = naam via `slugifyName()`, bv. "quinten-brosens".)
 
+Alle sleutels hebben de vorm `<soort>:<slug>[:<extra>]`. De export in
+`js/lib/backup.jsx` gebruikt precies die vorm om te bepalen wat van wie is;
+een nieuwe sleutel die dat patroon volgt, gaat automatisch mee in de back-up.
+`qvolve-users-v2` en `qvolve-session` volgen het patroon bewust niet en blijven
+buiten de export.
+
 ## Functionaliteit per module
 
 ### dashboard (`js/modules/dashboard/index.jsx`)
@@ -215,9 +230,11 @@ SetupWizard: gewicht/lengte/leeftijd/geslacht/activiteit/doel/macroprofiel
 ## Bekende beperkingen
 
 - Omdat alles in `localStorage` zit, is data niet gedeeld tussen apparaten of
-  gebruikers. Elk toestel staat op zichzelf.
+  gebruikers. Elk toestel staat op zichzelf. Een exportknop onderaan de
+  voeding-tab geeft alles als JSON-bestand mee; loopt het browserquotum vol,
+  dan verschijnt bovenaan een waarschuwing in plaats van een stille blokkade.
 - Service worker kan oude versies cachen; daarom network-first voor HTML/JS.
-  Bump `CACHE` in `sw.js` bij grote wijzigingen (nu `qvolve-v7`).
+  Bump `CACHE` in `sw.js` bij grote wijzigingen (nu `qvolve-v8`).
 - Een centrale database (bv. Firebase) zou nodig zijn voor gedeelde gebruikers
   of synchronisatie — bewust nog niet gedaan om het simpel en gratis te houden.
 
@@ -232,8 +249,9 @@ SetupWizard: gewicht/lengte/leeftijd/geslacht/activiteit/doel/macroprofiel
 
 ### Claude Code-hulpmiddelen (`.claude/`)
 
-Deze map is versiebeheerd (alleen `settings.local.json`, `cost-log.json` en
-`tools/` zijn genegeerd), zodat de hulpmiddelen mee in de repo zitten:
+Deze map is versiebeheerd (alleen `settings.local.json`, `cost-log.json`,
+`tools/` en `worktrees/` zijn genegeerd, net als `.superpowers/` in de
+projectroot), zodat de hulpmiddelen mee in de repo zitten:
 
 - `serve.ps1` — de lokale dev-server (zie hieronder).
 - `hooks/check-jsx.js` — PostToolUse-hook, de vervanger voor de ontbrekende
@@ -242,6 +260,11 @@ Deze map is versiebeheerd (alleen `settings.local.json`, `cost-log.json` en
   `js/**/*.jsx` dat niet als `<script>` in `qvolve.html` staat. Babel-standalone
   wordt één keer gedownload naar `.claude/tools/`; zonder netwerk slaat de hook
   de jsx-controle over in plaats van te blokkeren.
+- `checks/` — kale node-controles zonder afhankelijkheden, voor de logica die
+  niet in de browser hoeft: `node .claude/checks/storage.check.mjs` en
+  `node .claude/checks/backup.check.mjs`. `harness.mjs` laadt een lib in een
+  vm-context met een nagebootste `localStorage`. Fase 2 zet hier een echte
+  testrunner naast en neemt deze gevallen over.
 - `skills/preview/` — `/preview`: server starten, app in de browser laden,
   console-fouten nakijken. Bevat ook het recept om de login over te slaan.
 - `skills/deploy/` — `/deploy`: `CACHE` in `sw.js` bumpen, committen, pushen.

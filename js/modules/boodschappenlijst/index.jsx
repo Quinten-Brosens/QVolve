@@ -167,7 +167,7 @@ function ShoppingListModal({ userSlug, initialDate, onClose }) {
   const [editVal, setEditVal] = useState('');
 
   const storeKey = `shop-state:${userSlug}:${start}:${end}`;
-  function loadState() { try { return JSON.parse(localStorage.getItem(storeKey)) || {}; } catch { return {}; } }
+  function loadState() { return lsGet(storeKey) || {}; }
   const [checked, setChecked] = useState(() => new Set(loadState().checked || []));
   const [extras, setExtras] = useState(() => loadState().extras || []);
   const [overrides, setOverrides] = useState(() => loadState().overrides || {});
@@ -184,7 +184,7 @@ function ShoppingListModal({ userSlug, initialDate, onClose }) {
   }, [storeKey]);
 
   React.useEffect(() => {
-    try { localStorage.setItem(storeKey, JSON.stringify({ checked: [...checked], extras, overrides, extraPerson })); } catch {}
+    lsSet(storeKey, { checked: [...checked], extras, overrides, extraPerson });
   }, [checked, extras, overrides, storeKey, extraPerson]);
 
   const baseList = useMemo(() => buildShoppingList(userSlug, start, end), [userSlug, start, end]);

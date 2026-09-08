@@ -92,8 +92,9 @@ function App() {
     if (Object.keys(photos).length) {
       const key = `meal-photos:${userSlug}:${dateStr}`;
       // Een volle localStorage mag nooit een maaltijd kosten: het logboek is
-      // hierboven al opgeslagen, de foto is bijzaak.
-      try { lsSet(key, { ...(lsGet(key) || {}), ...photos }); } catch (e) {}
+      // hierboven al opgeslagen, de foto is bijzaak. lsSet meldt een vol
+      // quotum zelf aan de banner en geeft hier gewoon false terug.
+      lsSet(key, { ...(lsGet(key) || {}), ...photos });
       setMealPhotos(lsGet(key) || {});
     }
   }
@@ -191,6 +192,10 @@ function App() {
       {/* Content */}
       <main className="max-w-2xl mx-auto px-4 pt-4 pb-24">
 
+        <div className="mb-4 empty:mb-0">
+          <StorageWarningBanner userName={userName} userSlug={userSlug}/>
+        </div>
+
         {tab === 'voeding' && (
           <>
             {(!profile || editingProfile) && (
@@ -235,6 +240,8 @@ function App() {
                 </div>
 
                 <DailyLogList log={log} onRemove={removeLogEntry} onOpenAdd={openAddOverlay} mealPhotos={mealPhotos}/>
+
+                <DataExportCard userName={userName} userSlug={userSlug}/>
 
                 {/* FAB — voeg toe aan dagboek */}
                 <button onClick={()=>openAddOverlay(MEAL_TIMES[0].key)}
