@@ -508,10 +508,17 @@ Vervang in `js/app.jsx` (rond regel 92–98):
 - [ ] **Step 10: Controleer dat er nergens anders nog rechtstreeks naar `localStorage` gegrepen wordt**
 
 ```bash
-grep -rn "localStorage\." --include=*.jsx js/ | grep -v "js/lib/storage.jsx"
+grep -rn "localStorage\." --include=*.jsx js/ | grep -v "js/lib/storage.jsx" | grep -v "js/lib/backup.jsx"
 ```
 
 Verwacht: geen enkele regel.
+
+`js/lib/backup.jsx` staat er bewust naast. De export moet de opslag *doorlopen*
+(`localStorage.length`, `localStorage.key(i)`) en `readForExport` leest de ruwe tekst met
+`getItem` om onleesbare JSON niet weg te gooien — twee dingen die `storage.jsx` niet aanbiedt.
+Het zijn alleen leesacties: die kunnen geen quotum raken, dus er glipt niets langs de
+quota-bewaking. Fase 3 zet hier een expliciete interface omheen; tot dan is dit de enige
+uitzondering, en één die alleen leest.
 
 - [ ] **Step 11: Controleer in de browser dat de app nog laadt**
 
