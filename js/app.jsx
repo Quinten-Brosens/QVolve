@@ -10,6 +10,7 @@ function App() {
   const [macros, setMacros] = useState(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [log, setLog] = useState([]);
+  const [mealPhotos, setMealPhotos] = useState({});
   const [dateStr, setDateStr] = useState(toDateStr(new Date()));
   const [customFoods, setCustomFoods] = useState([]);
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -41,11 +42,13 @@ function App() {
     setCustomFoods(cf);
   }, [userSlug]);
 
-  // Logboek laden
+  // Logboek laden — de foto-miniaturen van die dag staan in een aparte key,
+  // zodat het logboek zelf klein blijft.
   useEffect(() => {
     if (!userSlug) return;
     const saved = lsGet(`daily-log:${userSlug}:${dateStr}`) || [];
     setLog(saved);
+    setMealPhotos(lsGet(`meal-photos:${userSlug}:${dateStr}`) || {});
   }, [userSlug, dateStr]);
 
   const searchPool = useMemo(() => [...customFoods, ...NEVO_DATA], [customFoods]);
@@ -75,15 +78,38 @@ function App() {
 
   function addLogEntries(entries, mealOverride) {
     const meal = mealOverride || addOverlayMeal;
-    const newLog = [...log, ...entries.map(e => ({ ...e, mealTime: meal }))];
+    // Foto's horen niet in de logregel zelf: alle items van één foto delen
+    // hetzelfde photoId, dus we bewaren het beeld één keer apart.
+    const photos = {};
+    const clean = entries.map(e => {
+      const { _thumb, ...rest } = e;
+      if (_thumb && rest.photoId) photos[rest.photoId] = _thumb;
+      return { ...rest, mealTime: meal };
+    });
+    const newLog = [...log, ...clean];
     setLog(newLog);
     lsSet(`daily-log:${userSlug}:${dateStr}`, newLog);
+    if (Object.keys(photos).length) {
+      const key = `meal-photos:${userSlug}:${dateStr}`;
+      // Een volle localStorage mag nooit een maaltijd kosten: het logboek is
+      // hierboven al opgeslagen, de foto is bijzaak.
+      try { lsSet(key, { ...(lsGet(key) || {}), ...photos }); } catch (e) {}
+      setMealPhotos(lsGet(key) || {});
+    }
   }
 
   function removeLogEntry(id) {
+    const gone = log.find(e => e.id === id);
     const newLog = log.filter(e => e.id !== id);
     setLog(newLog);
     lsSet(`daily-log:${userSlug}:${dateStr}`, newLog);
+    // Laatste regel van deze foto weg → de foto ook, anders blijft er beeld
+    // achter zonder maaltijd.
+    if (gone && gone.photoId && !newLog.some(e => e.photoId === gone.photoId)) {
+      const key = `meal-photos:${userSlug}:${dateStr}`;
+      const photos = lsGet(key) || {};
+      if (photos[gone.photoId]) { delete photos[gone.photoId]; lsSet(key, photos); setMealPhotos(photos); }
+    }
   }
 
   function addCustomFood(food) {
@@ -208,7 +234,7 @@ function App() {
                   <p className="text-[10px] text-gray-400 pt-2">BMR {macros.bmr} · TDEE {macros.tdee} kcal · {(MACRO_PROFILES[profile.macroProfile]||MACRO_PROFILES.normal).label}</p>
                 </div>
 
-                <DailyLogList log={log} onRemove={removeLogEntry} onOpenAdd={openAddOverlay}/>
+                <DailyLogList log={log} onRemove={removeLogEntry} onOpenAdd={openAddOverlay} mealPhotos={mealPhotos}/>
 
                 {/* FAB — voeg toe aan dagboek */}
                 <button onClick={()=>openAddOverlay(MEAL_TIMES[0].key)}

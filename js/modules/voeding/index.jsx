@@ -448,7 +448,7 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
 }
 
 // ─── DailyLogList ─────────────────────────────────────────────────────────────
-function DailyLogList({ log, onRemove, onOpenAdd }) {
+function DailyLogList({ log, onRemove, onOpenAdd, mealPhotos = {} }) {
   const grouped = useMemo(() => groupByMeal(log), [log]);
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
@@ -473,6 +473,9 @@ function DailyLogList({ log, onRemove, onOpenAdd }) {
                   {entries.map(e => (
                     <div key={e.id} className="py-1 border-b border-gray-50 last:border-0">
                       <div className="flex items-center justify-between">
+                        {e.photoId && mealPhotos[e.photoId] && (
+                          <img src={mealPhotos[e.photoId]} alt="" className="w-7 h-7 rounded object-cover mr-2 shrink-0" />
+                        )}
                         <p className="text-sm text-gray-800 flex-1 min-w-0">{e.name}{e.grams ? ` · ${e.grams}g` : ''}</p>
                         <div className="flex items-center gap-2 ml-2">
                           <span className="text-xs text-gray-400">{Math.round(e.kcal)} kcal</span>
