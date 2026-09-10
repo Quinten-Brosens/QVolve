@@ -1,0 +1,32 @@
+#!/bin/sh
+# Houdt AGENTS.md gelijk aan CLAUDE.md. CLAUDE.md is de bron; AGENTS.md is de
+# kopie die Codex leest. Zonder deze hook lopen ze uit elkaar, want niemand
+# denkt eraan de tweede bij te werken.
+#
+# Installeren (eenmalig per kloon):  git config core.hooksPath githooks
+
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+[ -f CLAUDE.md ] || exit 0
+
+# Al gelijk? Niets te doen.
+if [ -f AGENTS.md ] && cmp -s CLAUDE.md AGENTS.md; then
+  exit 0
+fi
+
+# Wel AGENTS.md gewijzigd, niet CLAUDE.md: iemand bewerkte het verkeerde
+# bestand. Stilletjes overschrijven zou dat werk weggooien, dus stoppen.
+if [ -f AGENTS.md ] \
+   && ! git diff --quiet HEAD -- AGENTS.md 2>/dev/null \
+   &&   git diff --quiet HEAD -- CLAUDE.md 2>/dev/null; then
+  echo "pre-commit: AGENTS.md is gewijzigd, CLAUDE.md niet." >&2
+  echo "  CLAUDE.md is de bron van waarheid; AGENTS.md is er een kopie van." >&2
+  echo "  Zet je wijziging in CLAUDE.md, dan schrijft deze hook AGENTS.md bij." >&2
+  echo "  Toch doorduwen? git commit --no-verify" >&2
+  exit 1
+fi
+
+cp CLAUDE.md AGENTS.md
+git add AGENTS.md
+echo "pre-commit: AGENTS.md bijgewerkt vanaf CLAUDE.md en meegecommit."

@@ -1,13 +1,14 @@
 // ─── lib/macros.jsx — constanten en macro-berekeningen ────────────────────────
 const NEVO_VERSION = "2025/9.0";
 
+// short = het label in de linkerkolom van de tijdlijn; daar past geen volle naam.
 const MEAL_TIMES = [
-  { key: "ontbijt",     label: "Ontbijt" },
-  { key: "snack_vm",    label: "Snack voormiddag" },
-  { key: "lunch",       label: "Lunch" },
-  { key: "snack_nm",    label: "Snack namiddag" },
-  { key: "diner",       label: "Diner" },
-  { key: "snack_avond", label: "Snack avond" },
+  { key: "ontbijt",     label: "Ontbijt",           short: "Ontbijt" },
+  { key: "snack_vm",    label: "Snack voormiddag",  short: "Voormid." },
+  { key: "lunch",       label: "Lunch",             short: "Lunch" },
+  { key: "snack_nm",    label: "Snack namiddag",    short: "Namid." },
+  { key: "diner",       label: "Diner",             short: "Diner" },
+  { key: "snack_avond", label: "Snack avond",       short: "Avond" },
 ];
 
 const ACTIVITY_FACTORS = {

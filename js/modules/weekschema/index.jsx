@@ -93,8 +93,8 @@ function VragenlijstStap({ vraag, waarde, onChange }) {
     <div className="space-y-2">
       {vraag.options.map(opt => (
         <button key={opt.value} onClick={() => onChange(opt.value)}
-          className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-colors ${waarde === opt.value ? 'border-orange-500 bg-orange-50 text-orange-700 font-medium' : 'border-gray-200 bg-white text-gray-700 hover:border-orange-300'}`}>
-          {waarde === opt.value ? <Icon name="CheckCircle2" size={14} className="inline mr-2 text-orange-500"/> : <Icon name="Circle" size={14} className="inline mr-2 text-gray-300"/>}{opt.label}
+          className={`w-full text-left px-4 py-3.5 rounded-2xl border text-[15px] transition-colors ${waarde === opt.value ? 'border-[#182a48] bg-[#182a48] text-white font-semibold' : 'border-[#dfe3ea] bg-[#f7f5f0] text-[#14223c]'}`}>
+          {waarde === opt.value ? <Icon name="CheckCircle2" size={15} className="inline mr-2.5 text-[#f97316]"/> : <Icon name="Circle" size={15} className="inline mr-2.5 text-[#cfd6e2]"/>}{opt.label}
         </button>
       ))}
     </div>
@@ -107,8 +107,8 @@ function VragenlijstStap({ vraag, waarde, onChange }) {
           const isSel = sel.includes(opt.value);
           return (
             <button key={opt.value} onClick={() => onChange(isSel ? sel.filter(v => v !== opt.value) : [...sel, opt.value])}
-              className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-colors ${isSel ? 'border-orange-500 bg-orange-50 text-orange-700 font-medium' : 'border-gray-200 bg-white text-gray-700 hover:border-orange-300'}`}>
-              {isSel ? <Icon name="CheckCircle2" size={14} className="inline mr-2 text-orange-500"/> : <Icon name="Circle" size={14} className="inline mr-2 text-gray-300"/>}{opt.label}
+              className={`w-full text-left px-4 py-3.5 rounded-2xl border text-[15px] transition-colors ${isSel ? 'border-[#182a48] bg-[#182a48] text-white font-semibold' : 'border-[#dfe3ea] bg-[#f7f5f0] text-[#14223c]'}`}>
+              {isSel ? <Icon name="CheckCircle2" size={15} className="inline mr-2.5 text-[#f97316]"/> : <Icon name="Circle" size={15} className="inline mr-2.5 text-[#cfd6e2]"/>}{opt.label}
             </button>
           );
         })}
@@ -116,7 +116,7 @@ function VragenlijstStap({ vraag, waarde, onChange }) {
     );
   }
   return <textarea value={waarde || ''} onChange={e => onChange(e.target.value)} placeholder={vraag.placeholder} rows={3}
-    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none" />;
+    className="w-full bg-[#f7f5f0] border border-[#dfe3ea] rounded-2xl px-4 py-3.5 text-[15px] text-[#14223c] resize-none focus:outline-none focus:border-[#182a48]" />;
 }
 
 function printWeekSchema(plan) {
@@ -153,47 +153,55 @@ function ImportSchemaModal({ plan, onImport, onClose, onGoToVoeding }) {
   const monday = mondayOf(startDate);
   function go() { const w = Math.max(1, Math.min(parseInt(weeks) || 0, 12)); const r = onImport(plan, startDate, w); setDone({ ...r, w }); }
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b border-gray-100">
-          <span className="text-sm font-semibold text-gray-900">📥 Schema importeren</span>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><Icon name="X" size={18}/></button>
-        </div>
-        <div className="p-5 space-y-4">
-          {done ? (
-            <div className="text-center py-4">
-              <Icon name="CheckCircle2" size={32} className="mx-auto text-green-500 mb-2"/>
-              <p className="text-sm text-gray-700">Schema geladen vanaf <b className="capitalize">{formatDateNice(done.monday)}</b>, voor <b>{done.w}</b> {done.w === 1 ? 'week' : 'weken'} ({done.count} dagen).</p>
-              <button onClick={() => { onClose(); onGoToVoeding && onGoToVoeding(); }} className="mt-4 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 px-6 text-sm font-medium">Naar logboek</button>
+    <Sheet onClose={onClose}>
+      <p className="m-0 mb-4 font-logo font-bold text-2xl text-[#14223c] shrink-0">Schema importeren</p>
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar space-y-4">
+        {done ? (
+          <div className="text-center py-4">
+            <Icon name="CheckCircle2" size={32} className="mx-auto text-[#2f8bff] mb-3"/>
+            <p className="m-0 text-[15px] text-[#14223c]">
+              Schema geladen vanaf <b className="capitalize">{formatDateNice(done.monday)}</b>, voor <b>{done.w}</b> {done.w === 1 ? 'week' : 'weken'} ({done.count} dagen).
+            </p>
+            <div className="mt-5">
+              <PrimaryButton onClick={() => { onClose(); onGoToVoeding && onGoToVoeding(); }}>Naar vandaag</PrimaryButton>
             </div>
-          ) : (
-            <>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Vanaf welke datum?</label>
-                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"/>
-                <p className="text-[11px] text-gray-400 mt-1">Start op de maandag van die week: <b className="capitalize">{formatDateNice(monday)}</b>. Maandag→maandag, dinsdag→dinsdag, …</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="text-sm text-gray-600">Aanhouden voor</label>
-                <input type="number" min="1" max="12" value={weeks} onChange={e => setWeeks(e.target.value)} className="w-16 border border-gray-200 rounded-lg px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-orange-400"/>
-                <label className="text-sm text-gray-600">{(parseInt(weeks) || 0) === 1 ? 'week' : 'weken'}</label>
-              </div>
-              <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg px-3 py-2">Let op: bestaande voeding op die dagen wordt overschreven.</p>
-              <button onClick={go} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 text-sm font-medium">Importeren</button>
-            </>
-          )}
-        </div>
+          </div>
+        ) : (
+          <>
+            <div>
+              <Eyebrow className="mb-1.5">Vanaf welke datum</Eyebrow>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                className="w-full border border-[#dfe3ea] rounded-xl px-3 py-2.5 text-sm text-[#14223c] focus:outline-none focus:border-[#182a48]"/>
+              <p className="mt-1.5 mb-0 text-[12px] text-[#8494aa]">
+                Start op de maandag van die week: <b className="capitalize text-[#4a5568]">{formatDateNice(monday)}</b>. Maandag naar maandag, dinsdag naar dinsdag, …
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[15px] text-[#4a5568]">Aanhouden voor</span>
+              <input type="number" min="1" max="12" value={weeks} onChange={e => setWeeks(e.target.value)}
+                className="w-16 border border-[#dfe3ea] rounded-xl px-3 py-2 text-center font-logo font-semibold text-[#14223c] focus:outline-none focus:border-[#182a48]"/>
+              <span className="text-[15px] text-[#4a5568]">{(parseInt(weeks) || 0) === 1 ? 'week' : 'weken'}</span>
+            </div>
+            <p className="m-0 text-[13px] text-[#c2410c] bg-[#f7f5f0] border border-[#dfe3ea] rounded-xl px-4 py-3">
+              Let op: bestaande voeding op die dagen wordt overschreven.
+            </p>
+            <PrimaryButton onClick={go}>Importeren</PrimaryButton>
+          </>
+        )}
       </div>
-    </div>
+    </Sheet>
   );
 }
 
-function WeekSchemaPanel({ macros, userSlug, onImport, onGoToVoeding }) {
+// ─── Week — het tabblad met het schema ───────────────────────────────────────
+// Zolang er geen schema is, staat hier de vragenlijst. Daarna de zeven dagen met
+// hun maaltijden. De dagnummers zijn die van de lopende week: zo landt het
+// schema precies zoals je het hier ziet wanneer je het importeert.
+function WeekSchemaPanel({ macros, userSlug, onImport, onGoToVoeding, onGoToLijst }) {
   const [fase, setFase] = useState('loading');
   const [stapIndex, setStapIndex] = useState(0);
   const [antwoorden, setAntwoorden] = useState({});
   const [plan, setPlan] = useState(null);
-  const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState('');
   const [selectedDay, setSelectedDay] = useState(0);
   const [showShopping, setShowShopping] = useState(false);
@@ -207,17 +215,22 @@ function WeekSchemaPanel({ macros, userSlug, onImport, onGoToVoeding }) {
     else setFase('vragenlijst');
   }, [userSlug]);
 
+  // De maandag van de lopende week — geeft de dagpillen hun nummer.
+  const weekMonday = mondayOf(toDateStr(new Date()));
+
   async function genereerSchema(prefs) {
-    setGenerating(true); setGenError(''); setFase('generating');
+    setGenError(''); setFase('generating');
     try {
       const text = await callGemini(buildSchemaPrompt(macros, prefs), 24000, 8000);
       const clean = text.replace(/```json|```/g, '').trim();
       const start = clean.indexOf('{'), end = clean.lastIndexOf('}');
       const parsed = JSON.parse(start >= 0 && end > start ? clean.slice(start, end + 1) : clean);
       if (!parsed.days || !Array.isArray(parsed.days)) throw new Error('Ongeldig schema-formaat.');
-      setPlan(parsed); setFase('plan'); lsSet(`weekschema-plan:${userSlug}`, parsed);
-    } catch (e) { setGenError(e.message || 'Fout bij genereren.'); setFase('vragenlijst'); setStapIndex(VRAGENLIJST.length - 1); }
-    setGenerating(false);
+      setPlan(parsed); setFase('plan'); setSelectedDay(0); lsSet(`weekschema-plan:${userSlug}`, parsed);
+    } catch (e) {
+      setGenError(e.message || 'Fout bij genereren.');
+      setFase('vragenlijst'); setStapIndex(VRAGENLIJST.length - 1);
+    }
   }
 
   function handleAntwoord(val) { setAntwoorden(p => ({ ...p, [VRAGENLIJST[stapIndex].id]: val })); }
@@ -234,10 +247,13 @@ function WeekSchemaPanel({ macros, userSlug, onImport, onGoToVoeding }) {
   };
 
   if (fase === 'generating') return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 text-center">
-      <div className="flex justify-center mb-4"><Icon name="ChefHat" size={36} className="text-orange-500"/></div>
-      <h2 className="text-sm font-semibold text-gray-900 mb-1">Schema wordt gegenereerd…</h2>
-      <p className="text-xs text-gray-500">De AI stelt jouw weekmenu samen. Even geduld (±20 sec).</p>
+    <div className="pt-2">
+      <Eyebrow>Even geduld</Eyebrow>
+      <p className="mt-2 mb-0 font-logo font-bold text-[30px] leading-[1.1] text-[#14223c]">Je schema wordt gemaakt</p>
+      <div className="mt-8 bg-[#182a48] rounded-[26px] px-[22px] py-8 text-center">
+        <Icon name="ChefHat" size={36} className="mx-auto text-[#f97316] mb-4"/>
+        <p className="m-0 text-[15px] text-white/75">De AI stelt jouw weekmenu samen. Dat duurt ongeveer 20 seconden.</p>
+      </div>
     </div>
   );
 
@@ -245,21 +261,33 @@ function WeekSchemaPanel({ macros, userSlug, onImport, onGoToVoeding }) {
     const vraag = VRAGENLIJST[stapIndex];
     const progress = ((stapIndex + 1) / VRAGENLIJST.length) * 100;
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2"><Icon name="Calendar" size={16} className="text-orange-500"/><span className="text-sm font-semibold text-gray-900">Weekschema samenstellen</span></div>
-          <span className="text-xs text-gray-400">{stapIndex + 1} / {VRAGENLIJST.length}</span>
+      <div className="pt-2">
+        <div className="flex items-baseline justify-between">
+          <Eyebrow>Weekschema</Eyebrow>
+          <span className="font-logo font-semibold text-sm text-[#4a5568]">{stapIndex + 1} / {VRAGENLIJST.length}</span>
         </div>
-        <div className="h-1.5 bg-gray-100 rounded-full mb-5 overflow-hidden"><div className="h-full bg-orange-500 rounded-full transition-all" style={{ width: `${progress}%` }}/></div>
-        <p className="text-sm font-medium text-gray-800 mb-4">{vraag.label}</p>
-        <VragenlijstStap vraag={vraag} waarde={antwoorden[vraag.id]} onChange={handleAntwoord}/>
-        {genError && <p className="mt-3 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{genError}</p>}
+        <p className="mt-2 mb-0 font-logo font-bold text-[30px] leading-[1.1] tracking-[-.01em] text-[#14223c]">Even je smaak leren kennen</p>
+        <div className="h-1.5 bg-[#dfe3ea] rounded-full mt-4 overflow-hidden">
+          <div className="h-full bg-[#c2410c] rounded-full transition-all" style={{ width: `${progress}%` }}/>
+        </div>
+
+        <div className="mt-6 bg-white border border-[#dfe3ea] rounded-[22px] p-5">
+          <p className="m-0 mb-4 font-semibold text-[16px] text-[#14223c]">{vraag.label}</p>
+          <VragenlijstStap vraag={vraag} waarde={antwoorden[vraag.id]} onChange={handleAntwoord}/>
+        </div>
+
+        {genError && <p className="mt-3 mb-0 text-[13px] text-[#c2410c] bg-white border border-[#dfe3ea] rounded-xl px-4 py-3">{genError}</p>}
+
         <div className="flex gap-2 mt-5">
-          {stapIndex > 0 && <button onClick={() => setStapIndex(i => i - 1)} className="flex-1 border border-gray-200 text-gray-600 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50">← Vorige</button>}
-          <button onClick={handleVolgende} disabled={!isGeldig() && vraag.type !== 'text'}
-            className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors ${(isGeldig() || vraag.type === 'text') ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
-            {stapIndex < VRAGENLIJST.length - 1 ? 'Volgende →' : '✨ Genereer weekschema'}
-          </button>
+          {stapIndex > 0 && (
+            <button onClick={() => setStapIndex(i => i - 1)}
+              className="flex-1 h-14 rounded-[20px] border border-[#dfe3ea] bg-white text-[#14223c] font-semibold text-base active:scale-[.98] transition-transform">
+              Vorige
+            </button>
+          )}
+          <PrimaryButton onClick={handleVolgende} disabled={!isGeldig() && vraag.type !== 'text'} className="flex-1">
+            {stapIndex < VRAGENLIJST.length - 1 ? 'Volgende' : <><Icon name="Sparkles" size={18}/> Genereer schema</>}
+          </PrimaryButton>
         </div>
       </div>
     );
@@ -267,62 +295,113 @@ function WeekSchemaPanel({ macros, userSlug, onImport, onGoToVoeding }) {
 
   if (fase === 'plan' && plan) {
     const dag = plan.days[selectedDay];
+    const kortMaandag = new Date(weekMonday + 'T00:00:00').toLocaleDateString('nl-BE', { day: 'numeric', month: 'short' }).replace('.', '');
     return (
-      <div className="space-y-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2"><Icon name="Calendar" size={16} className="text-orange-500"/><span className="text-sm font-semibold text-gray-900">Jouw weekschema</span></div>
-            <div className="flex flex-wrap gap-2 justify-end">
-              <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500 text-white hover:bg-orange-600">📥 Importeren</button>
-              <button onClick={() => printWeekSchema(plan)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">🖨️ Afdrukken</button>
-              <button onClick={() => setShowShopping(!showShopping)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${showShopping ? 'bg-orange-50 border-orange-300 text-orange-600' : 'border-gray-200 text-gray-600'}`}>🛒 Boodschappen</button>
-              <button onClick={() => { setPlan(null); lsDel(`weekschema-plan:${userSlug}`); setFase('vragenlijst'); setStapIndex(0); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600"><Icon name="RefreshCw" size={12}/> Opnieuw</button>
-            </div>
-          </div>
-          <div className="flex gap-1 overflow-x-auto pb-1">
-            {plan.days.map((d, i) => (
+      <div className="pt-2">
+        <Eyebrow>Week van {kortMaandag}</Eyebrow>
+        <p className="mt-2 mb-0 font-logo font-bold text-[30px] leading-[1.1] tracking-[-.01em] text-[#14223c]">Je week staat klaar</p>
+        <p className="mt-2 mb-0 text-sm leading-relaxed text-[#4a5568]" style={{ textWrap: 'pretty' }}>
+          Tik een dag om de maaltijden te zien. Importeer het schema om het als logboek in te laden.
+        </p>
+
+        <div className="flex gap-1.5 mt-5">
+          {plan.days.slice(0, 7).map((d, i) => {
+            const on = i === selectedDay && !showShopping;
+            const datum = new Date(addDays(weekMonday, i) + 'T00:00:00');
+            return (
               <button key={i} onClick={() => { setSelectedDay(i); setShowShopping(false); }}
-                className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${selectedDay === i && !showShopping ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                {d.day || `Dag ${i + 1}`}
+                className={`flex-1 min-w-0 text-center rounded-[14px] py-2.5 border transition-colors active:scale-95
+                  ${on ? 'bg-[#182a48] border-[#182a48]' : 'bg-white border-[#dfe3ea]'}`}>
+                <span className={`block font-mono text-[10px] font-semibold uppercase ${on ? 'text-white/65' : 'text-[#4a5568]'}`}>
+                  {(d.day || '').slice(0, 2)}
+                </span>
+                <span className={`block mt-1 font-logo font-bold text-[15px] ${on ? 'text-white' : 'text-[#14223c]'}`}>
+                  {datum.getDate()}
+                </span>
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
 
+        {!showShopping && dag && (
+          <>
+            <div className="mt-5 flex flex-col gap-2">
+              {(dag.meals || []).map((meal, i) => (
+                <div key={i} className="bg-white border border-[#dfe3ea] rounded-[18px] px-[18px] py-4">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <Eyebrow color={QV.orangeInk}>
+                      {MEAL_TIMES.find(m => m.key === normalizeMealTime(meal.mealTime))?.label || meal.mealTime}
+                    </Eyebrow>
+                    <span className="shrink-0 font-semibold text-[13px] text-[#4a5568]">{Math.round(meal.kcal)} kcal</span>
+                  </div>
+                  <p className="mt-1.5 mb-0 font-semibold text-[16px] text-[#14223c]">{meal.name}</p>
+                  {Array.isArray(meal.ingredients) && meal.ingredients.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {meal.ingredients.map((ing, j) => (
+                        <span key={j} className="font-medium text-[11px] bg-[#eef1f6] text-[#35507d] rounded-md px-2 py-1">{ing}</span>
+                      ))}
+                    </div>
+                  )}
+                  {meal.tip && <p className="mt-2 mb-0 text-[12px] text-[#8494aa] italic">{meal.tip}</p>}
+                </div>
+              ))}
+            </div>
+
+            {dag.totals && (
+              <div className="mt-4 bg-[#e6ecf6] rounded-[18px] px-[18px] py-4 flex items-baseline justify-between gap-2">
+                <span className="font-semibold text-[13px] text-[#1e3a8a] capitalize">Dagtotaal {dag.day || ''}</span>
+                <span className="shrink-0 font-logo font-bold text-[20px] text-[#1e3a8a]">{Math.round(dag.totals.kcal)} kcal</span>
+              </div>
+            )}
+          </>
+        )}
+
         {showShopping && plan.shoppingList && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">🛒 Boodschappenlijst</h3>
+          <div className="mt-5 flex flex-col gap-4">
+            <p className="m-0 text-[13px] text-[#4a5568]">
+              De lijst die de AI bij dit schema gaf. Je eigen lijst op basis van wat je écht logde staat onder <b>Lijst</b>.
+            </p>
             {plan.shoppingList.map((cat, i) => (
-              <div key={i} className="mb-3">
-                <p className="text-xs font-semibold text-gray-600 mb-1">{cat.category}</p>
-                <ul className="text-xs text-gray-600 space-y-0.5">{(cat.items || []).map((it, j) => <li key={j} className="flex gap-1"><span>•</span><span>{it}</span></li>)}</ul>
+              <div key={i}>
+                <Eyebrow className="mb-2">{cat.category}</Eyebrow>
+                <div className="bg-white border border-[#dfe3ea] rounded-[18px] overflow-hidden">
+                  {(cat.items || []).map((it, j) => (
+                    <p key={j} className="m-0 px-4 py-3 text-[15px] text-[#14223c] border-b border-[#eef1f6] last:border-0">{it}</p>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
         )}
 
-        {!showShopping && dag && (
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-gray-900">{dag.day}</h3>
-            {(dag.meals || []).map((meal, i) => (
-              <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold text-orange-600">{MEAL_TIMES.find(m => m.key === normalizeMealTime(meal.mealTime))?.label || meal.mealTime}</span>
-                  <span className="text-xs text-gray-400">{meal.kcal} kcal · {meal.protein}g E</span>
-                </div>
-                <p className="text-sm font-semibold text-gray-900 mb-1">{meal.name}</p>
-                {meal.ingredients && <div className="flex flex-wrap gap-1 mb-2">{meal.ingredients.map((ing, j) => <span key={j} className="text-[11px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">{ing}</span>)}</div>}
-                {meal.tip && <p className="text-xs text-gray-500 italic">💡 {meal.tip}</p>}
-              </div>
-            ))}
-            {dag.totals && (
-              <div className="bg-orange-50 border border-orange-100 rounded-xl p-3">
-                <p className="text-xs font-semibold text-gray-600 mb-1">Dagtotaal</p>
-                <p className="text-xs text-gray-600">{Math.round(dag.totals.kcal)} kcal · {Math.round(dag.totals.protein)}g eiwit · {Math.round(dag.totals.fat)}g vet · {Math.round(dag.totals.carbs)}g KH</p>
-              </div>
-            )}
-          </div>
-        )}
+        <div className="mt-4">
+          <PrimaryButton onClick={onGoToLijst}>
+            <Icon name="ShoppingCart" size={18}/> Naar boodschappenlijst
+          </PrimaryButton>
+        </div>
+
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button onClick={() => setShowImport(true)}
+            className="h-12 rounded-[18px] border border-[#dfe3ea] bg-white text-[#14223c] font-semibold text-sm flex items-center justify-center gap-2 active:scale-[.98] transition-transform">
+            <Icon name="Download" size={15}/> Importeren
+          </button>
+          <button onClick={() => printWeekSchema(plan)}
+            className="h-12 rounded-[18px] border border-[#dfe3ea] bg-white text-[#14223c] font-semibold text-sm flex items-center justify-center gap-2 active:scale-[.98] transition-transform">
+            <Icon name="Printer" size={15}/> Afdrukken
+          </button>
+          {plan.shoppingList && (
+            <button onClick={() => setShowShopping(v => !v)}
+              className={`h-12 rounded-[18px] border font-semibold text-sm flex items-center justify-center gap-2 active:scale-[.98] transition-transform
+                ${showShopping ? 'bg-[#182a48] border-[#182a48] text-white' : 'bg-white border-[#dfe3ea] text-[#14223c]'}`}>
+              <Icon name="List" size={15}/> AI-lijst
+            </button>
+          )}
+          <button onClick={() => { setPlan(null); lsDel(`weekschema-plan:${userSlug}`); setFase('vragenlijst'); setStapIndex(0); setShowShopping(false); }}
+            className="h-12 rounded-[18px] border border-[#dfe3ea] bg-white text-[#14223c] font-semibold text-sm flex items-center justify-center gap-2 active:scale-[.98] transition-transform">
+            <Icon name="RefreshCw" size={15}/> Opnieuw
+          </button>
+        </div>
+
         {showImport && <ImportSchemaModal plan={plan} onImport={onImport} onClose={() => setShowImport(false)} onGoToVoeding={onGoToVoeding}/>}
       </div>
     );

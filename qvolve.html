@@ -8,9 +8,9 @@
   <!-- PWA -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Qvolve" />
-  <meta name="theme-color" content="#182a48" />
+  <meta name="theme-color" content="#f7f5f0" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
 
@@ -36,9 +36,21 @@
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     :root { --sat: env(safe-area-inset-top,0px); --sab: env(safe-area-inset-bottom,0px); }
     .font-logo { font-family: 'Rajdhani', system-ui, -apple-system, sans-serif; }
+    .no-scrollbar::-webkit-scrollbar { width: 0; height: 0; }
+    .no-scrollbar { scrollbar-width: none; }
+    /* Bewegingen uit het ontwerp — sheets, kaarten en de toast. */
+    @keyframes qv-fade  { from { opacity: 0 } to { opacity: 1 } }
+    @keyframes qv-sheet { from { transform: translateY(100%) } to { transform: translateY(0) } }
+    @keyframes qv-card  { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: translateY(0) } }
+    @keyframes qv-toast { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: translateY(0) } }
+    @keyframes qv-pop   { 0% { transform: scale(.85); opacity: 0 } 60% { transform: scale(1.05) } 100% { transform: scale(1); opacity: 1 } }
+    @keyframes qv-scan  { 0% { opacity: .35; transform: scale(.97) } 50% { opacity: 1; transform: scale(1) } 100% { opacity: .35; transform: scale(.97) } }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
   </style>
 </head>
-<body class="bg-gray-50">
+<body class="bg-[#e8e6e1]">
 <div id="root"><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(ellipse at top,#26395f 0%,#14223c 65%);"><p style="font-family:'Rajdhani',system-ui,sans-serif;font-size:30px;font-weight:700;margin-bottom:8px;"><span style="color:#2f8bff">Q</span><span style="color:#f97316">volve</span></p><p style="color:#7e96b8;font-size:13px;">Laden...</p></div></div>
 
 <script src="data/nevo-data.js"></script>
@@ -50,6 +62,7 @@ window.onerror = function(msg, src, line, col, err) {
 </script>
 <script type="text/babel" data-presets="react,env" src="js/lib/storage.jsx"></script>
 <script type="text/babel" data-presets="react,env" src="js/lib/utils.jsx"></script>
+<script type="text/babel" data-presets="react,env" src="js/lib/theme.jsx"></script>
 <script type="text/babel" data-presets="react,env" src="js/lib/backup.jsx"></script>
 <script type="text/babel" data-presets="react,env" src="js/lib/image.jsx"></script>
 <script type="text/babel" data-presets="react,env" src="js/lib/macros.jsx"></script>
@@ -59,12 +72,14 @@ window.onerror = function(msg, src, line, col, err) {
 <script type="text/babel" data-presets="react,env" src="js/modules/auth/index.jsx"></script>
 <script type="text/babel" data-presets="react,env" src="js/modules/onboarding/index.jsx"></script>
 <script type="text/babel" data-presets="react,env" src="js/modules/dashboard/index.jsx"></script>
+<script type="text/babel" data-presets="react,env" src="js/modules/coach/index.jsx"></script>
 <script type="text/babel" data-presets="react,env" src="js/modules/fotomodus/index.jsx"></script>
 <script type="text/babel" data-presets="react,env" src="js/modules/voeding/index.jsx"></script>
 <script type="text/babel" data-presets="react,env" src="js/modules/boodschappenlijst/index.jsx"></script>
 <script type="text/babel" data-presets="react,env" src="js/modules/weekschema/index.jsx"></script>
 <script type="text/babel" data-presets="react,env" src="js/modules/training/index.jsx"></script>
 <script type="text/babel" data-presets="react,env" src="js/modules/gegevens/index.jsx"></script>
+<script type="text/babel" data-presets="react,env" src="js/modules/profiel/index.jsx"></script>
 <script type="text/babel" data-presets="react,env" src="js/app.jsx"></script>
 
 <script>

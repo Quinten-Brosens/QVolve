@@ -1,0 +1,7 @@
+# CLAUDE.md en AGENTS.md zijn byte-voor-byte kopieen (githooks/pre-commit
+# bewaakt dat). Vaste LF, anders ziet de hook een verschil dat er niet is.
+CLAUDE.md text eol=lf
+AGENTS.md text eol=lf
+
+# Shell-scripts moeten LF houden, ook op Windows.
+githooks/* text eol=lf

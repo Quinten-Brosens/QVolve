@@ -1,11 +1,18 @@
 // ─── Hoofd App ───────────────────────────────────────────────────────────────
+// Vier tabbladen uit het ontwerp: Vandaag, Week, Lijst, Profiel. De schil is
+// licht (warm gebroken wit); donker navy is hier een kaartkleur, geen chrome.
 
-
+const APP_TABS = [
+  { id: 'vandaag', label: 'Vandaag', icon: 'Home' },
+  { id: 'week',    label: 'Week',    icon: 'Calendar' },
+  { id: 'lijst',   label: 'Lijst',   icon: 'List' },
+  { id: 'profiel', label: 'Profiel', icon: 'User' },
+];
 
 function App() {
   // Herstel een geldige sessie (max. 3 dagen oud) zodat je niet telkens opnieuw moet inloggen.
   const [userName, setUserName] = useState(() => loadSession());
-  const [tab, setTab] = useState('voeding');
+  const [tab, setTab] = useState('vandaag');
   const [profile, setProfile] = useState(null);
   const [macros, setMacros] = useState(null);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -13,42 +20,46 @@ function App() {
   const [mealPhotos, setMealPhotos] = useState({});
   const [dateStr, setDateStr] = useState(toDateStr(new Date()));
   const [customFoods, setCustomFoods] = useState([]);
+  const [skips, setSkips] = useState([]);
+  const [toast, setToast] = useState(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
-  const [showShoppingList, setShowShoppingList] = useState(false);
   const [showRepeatDay, setShowRepeatDay] = useState(false);
   const [showAddOverlay, setShowAddOverlay] = useState(false);
   const [addOverlayMeal, setAddOverlayMeal] = useState(MEAL_TIMES[0].key);
-
-  function openAddOverlay(meal){ setAddOverlayMeal(meal||MEAL_TIMES[0].key); setShowAddOverlay(true); }
+  const toastTimer = useRef(null);
 
   const userSlug = userName ? slugifyName(userName) : '';
 
-  // Bij opstarten: vraag persistente opslag aan en ververs de sessie (sliding window van 3 dagen).
+  function openAddOverlay(meal) { setAddOverlayMeal(meal || MEAL_TIMES[0].key); setShowAddOverlay(true); }
+
+  // Bij opstarten: vraag persistente opslag aan en ververs de sessie.
   useEffect(() => {
     requestPersistentStorage();
-    if (userName) saveSession(userName);
+    if (userName) refreshSession();
+    return () => clearTimeout(toastTimer.current);
   }, []);
 
   // Inloggen / uitloggen — houdt de sessie in localStorage in sync.
-  function handleUnlock(name) { saveSession(name); setUserName(name); }
+  // onthoud = de keuze uit het loginscherm: sessie tot je uitlogt, of drie dagen.
+  function handleUnlock(name, onthoud) { saveSession(name, onthoud); setUserName(name); }
   function handleLogout() { clearSession(); setUserName(null); }
 
   // Profiel laden
   useEffect(() => {
     if (!userSlug) return;
     const p = lsGet(`profile:${userSlug}`);
-    if (p) { setProfile(p); setMacros(calcMacros(p)); }
-    const cf = lsGet(`custom-foods:${userSlug}`) || [];
-    setCustomFoods(cf);
+    if (p) { setProfile(p); setMacros(lsGet(`macros:${userSlug}`) || calcMacros(p)); }
+    setCustomFoods(lsGet(`custom-foods:${userSlug}`) || []);
   }, [userSlug]);
 
   // Logboek laden — de foto-miniaturen van die dag staan in een aparte key,
-  // zodat het logboek zelf klein blijft.
+  // zodat het logboek zelf klein blijft. De overgeslagen eetmomenten horen ook
+  // bij de dag en komen uit hun eigen sleutel.
   useEffect(() => {
     if (!userSlug) return;
-    const saved = lsGet(`daily-log:${userSlug}:${dateStr}`) || [];
-    setLog(saved);
+    setLog(lsGet(`daily-log:${userSlug}:${dateStr}`) || []);
     setMealPhotos(lsGet(`meal-photos:${userSlug}:${dateStr}`) || {});
+    setSkips(loadCoachSkips(userSlug, dateStr));
   }, [userSlug, dateStr]);
 
   const searchPool = useMemo(() => [...customFoods, ...NEVO_DATA], [customFoods]);
@@ -76,8 +87,27 @@ function App() {
     lsSet(`macros:${userSlug}`, m);
   }
 
+  // Toont de bevestiging met "Ongedaan". De vorige stand van de dag gaat mee,
+  // zodat één tik alles terugzet — inclusief de foto's.
+  function showToast(text, prevLog, prevPhotos) {
+    clearTimeout(toastTimer.current);
+    setToast({ text, prevLog, prevPhotos });
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
+  }
+
+  function undoToast() {
+    if (!toast) return;
+    setLog(toast.prevLog);
+    lsSet(`daily-log:${userSlug}:${dateStr}`, toast.prevLog);
+    setMealPhotos(toast.prevPhotos);
+    lsSet(`meal-photos:${userSlug}:${dateStr}`, toast.prevPhotos);
+    clearTimeout(toastTimer.current);
+    setToast(null);
+  }
+
   function addLogEntries(entries, mealOverride) {
     const meal = mealOverride || addOverlayMeal;
+    const vorigLog = log, vorigePhotos = mealPhotos;
     // Foto's horen niet in de logregel zelf: alle items van één foto delen
     // hetzelfde photoId, dus we bewaren het beeld één keer apart.
     const photos = {};
@@ -97,10 +127,13 @@ function App() {
       lsSet(key, { ...(lsGet(key) || {}), ...photos });
       setMealPhotos(lsGet(key) || {});
     }
+    const naam = clean.length === 1 ? clean[0].name : `${clean.length} items`;
+    showToast(`${naam} gelogd`, vorigLog, vorigePhotos);
   }
 
   function removeLogEntry(id) {
     const gone = log.find(e => e.id === id);
+    const vorigLog = log, vorigePhotos = mealPhotos;
     const newLog = log.filter(e => e.id !== id);
     setLog(newLog);
     lsSet(`daily-log:${userSlug}:${dateStr}`, newLog);
@@ -111,12 +144,35 @@ function App() {
       const photos = lsGet(key) || {};
       if (photos[gone.photoId]) { delete photos[gone.photoId]; lsSet(key, photos); setMealPhotos(photos); }
     }
+    if (gone) showToast(`${gone.name} verwijderd`, vorigLog, vorigePhotos);
   }
 
   function addCustomFood(food) {
     const updated = [...customFoods.filter(f => f.id !== food.id), food];
     setCustomFoods(updated);
     lsSet(`custom-foods:${userSlug}`, updated);
+  }
+
+  function deleteCustomFood(id) {
+    const updated = customFoods.filter(f => f.id !== id);
+    setCustomFoods(updated);
+    lsSet(`custom-foods:${userSlug}`, updated);
+  }
+
+  // De coach slaat een eetmoment over voor deze dag.
+  function skipMoment(key) {
+    const updated = [...skips, key];
+    setSkips(updated);
+    saveCoachSkips(userSlug, dateStr, updated);
+  }
+
+  function pickSuggestion(s, mealKey) {
+    addLogEntries([{
+      id: `log-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: s.name, grams: s.grams || null,
+      kcal: s.kcal, protein: s.protein, fat: s.fat, carbs: s.carbs,
+      source: s.source, ingredients: s.ingredients,
+    }], mealKey);
   }
 
   function mealToEntry(meal) {
@@ -170,122 +226,129 @@ function App() {
     carbs: Math.max(macros.carbsG - totals.carbs, 0),
   } : null;
 
+  const moment = useMemo(() => nextMoment(log, skips), [log, skips]);
+
   if (!userName) return <AccessGate onUnlock={handleUnlock} />;
 
+  const setupNodig = !profile || !macros || editingProfile;
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {showBreakdown && macros && <MacroBreakdownModal log={log} macros={macros} totals={totals} onClose={() => setShowBreakdown(false)} />}
-      {showShoppingList && <ShoppingListModal userSlug={userSlug} initialDate={dateStr} onClose={() => setShowShoppingList(false)} />}
-      {showRepeatDay && <RepeatDayModal dateStr={dateStr} count={log.length} onConfirm={repeatDayToWeekdays} onClose={() => setShowRepeatDay(false)} />}
-      {showAddOverlay && <AddFoodOverlay pool={searchPool} onAdd={(entries,meal)=>{addLogEntries(entries,meal);setShowAddOverlay(false);}} onSaveCustom={addCustomFood} onClose={()=>setShowAddOverlay(false)} initialMeal={addOverlayMeal} remaining={remaining}/>}
+    <div className="min-h-screen bg-[#f7f5f0]">
+      {showBreakdown && macros && (
+        <MacroBreakdownModal log={log} macros={macros} totals={totals} onClose={() => setShowBreakdown(false)}/>
+      )}
+      {showRepeatDay && (
+        <RepeatDayModal dateStr={dateStr} count={log.length} onConfirm={repeatDayToWeekdays} onClose={() => setShowRepeatDay(false)}/>
+      )}
+      {showAddOverlay && (
+        <AddFoodOverlay pool={searchPool} customFoods={customFoods} userSlug={userSlug} dateStr={dateStr}
+          onAdd={addLogEntries} onSaveCustom={addCustomFood} onClose={() => setShowAddOverlay(false)}
+          initialMeal={addOverlayMeal} remaining={remaining}/>
+      )}
 
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-[#182a48] border-b border-[#2b3e60] shadow-sm">
-        <div className="flex items-center justify-between px-4 h-14 max-w-2xl mx-auto">
-          <span className="font-logo text-2xl font-bold tracking-tight"><span className="text-[#2f8bff]">Q</span><span className="text-orange-500">volve</span></span>
-          <div className="flex items-center gap-3">
-            <button onClick={handleLogout} className="text-[11px] text-blue-300 hover:text-white underline" title="Uitloggen">{userName}</button>
+      <main className="max-w-md mx-auto px-6"
+            style={{ paddingTop: 'max(14px, env(safe-area-inset-top,0px))', paddingBottom: setupNodig ? '40px' : '130px' }}>
+
+        <StorageWarningBanner userName={userName} userSlug={userSlug}/>
+
+        {setupNodig ? (
+          <div className="pt-4">
+            <Eyebrow>{profile ? 'Profiel bijwerken' : 'Welkom bij Qvolve'}</Eyebrow>
+            <p className="mt-2 mb-6 font-logo font-bold text-[30px] leading-[1.1] tracking-[-.01em] text-[#14223c]">
+              {profile ? 'Je gegevens bijstellen' : 'Even je profiel invullen'}
+            </p>
+            <SetupWizard initial={profile} onComplete={handleProfileComplete}
+              onCancel={profile && macros ? () => setEditingProfile(false) : null}/>
           </div>
-        </div>
-      </header>
-
-      {/* Content */}
-      <main className="max-w-2xl mx-auto px-4 pt-4 pb-24">
-
-        <div className="mb-4 empty:mb-0">
-          <StorageWarningBanner userName={userName} userSlug={userSlug}/>
-        </div>
-
-        {tab === 'voeding' && (
+        ) : (
           <>
-            {(!profile || editingProfile) && (
-              <SetupWizard initial={profile} onComplete={handleProfileComplete} />
-            )}
-            {profile && !editingProfile && macros && (
-              <div className="space-y-4">
-                <DateNav dateStr={dateStr} onChange={setDateStr} />
-
-                <div className="flex gap-2">
-                  <button onClick={() => setShowShoppingList(true)} className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-600 rounded-xl py-2 text-xs font-medium">
-                    <Icon name="ShoppingCart" size={14}/> Boodschappenlijst
-                  </button>
-                  <button onClick={() => setShowRepeatDay(true)} className="flex-1 flex items-center justify-center gap-1.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-600 rounded-xl py-2 text-xs font-medium">
-                    <Icon name="RefreshCw" size={14}/> Dag herhalen
+            {tab === 'vandaag' && (
+              <div>
+                <div className="flex items-center justify-between pt-2">
+                  <DateNav dateStr={dateStr} onChange={setDateStr}/>
+                  <button onClick={() => setTab('profiel')} aria-label="Naar je profiel"
+                    className="w-[34px] h-[34px] rounded-full bg-[#e6ecf6] flex items-center justify-center font-logo font-semibold text-[13px] text-[#35507d] shrink-0">
+                    {initialen(userName)}
                   </button>
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-semibold text-gray-900">Dagtotaal</h2>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setShowBreakdown(true)} className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-50" title="Macroverdeling">
-                        <Icon name="PieChart" size={15}/>
-                      </button>
-                      <button onClick={() => setEditingProfile(true)} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 py-1.5 px-2 rounded-lg hover:bg-gray-50">
-                        <Icon name="Settings" size={13}/> Profiel
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between mb-3 bg-gray-50 rounded-xl px-3 py-2">
-                    <span className="text-xs text-gray-500">Caloriedoel</span>
-                    <KcalAdjuster targetKcal={macros.targetKcal} onAdjust={handleAdjustKcal} onReset={handleResetMacros}/>
-                  </div>
-                  <CalorieSummary consumed={totals.kcal} target={macros.targetKcal}/>
-                  <div className="grid grid-cols-3 gap-2 mt-4">
-                    <MacroRing label="Koolhydraten" consumed={totals.carbs} target={macros.carbsG} color="#1e3a8a"/>
-                    <MacroRing label="Eiwit" consumed={totals.protein} target={macros.proteinG} color="#2f8bff"/>
-                    <MacroRing label="Vet" consumed={totals.fat} target={macros.fatG} color="#f59e0b"/>
-                  </div>
-                  <p className="text-[10px] text-gray-400 pt-2">BMR {macros.bmr} · TDEE {macros.tdee} kcal · {(MACRO_PROFILES[profile.macroProfile]||MACRO_PROFILES.normal).label}</p>
+                <KcalHero totals={totals} macros={macros} onOpenMacros={() => setShowBreakdown(true)}/>
+                <SlotBar log={log} currentKey={moment && moment.key}/>
+                <div className="flex justify-between mt-2 text-xs font-medium text-[#4a5568] whitespace-nowrap">
+                  <span>{Math.round(totals.kcal)} gegeten</span>
+                  <span>eiwit {Math.round(totals.protein)} / {macros.proteinG} g</span>
+                </div>
+
+                <div className="mt-6">
+                  <CoachCard userSlug={userSlug} dateStr={dateStr} moment={moment} remaining={remaining}
+                    onPick={pickSuggestion} onSkip={skipMoment} onSearch={openAddOverlay}/>
                 </div>
 
                 <DailyLogList log={log} onRemove={removeLogEntry} onOpenAdd={openAddOverlay} mealPhotos={mealPhotos}/>
 
-                <DataExportCard userName={userName} userSlug={userSlug}/>
-
-                {/* FAB — voeg toe aan dagboek */}
-                <button onClick={()=>openAddOverlay(MEAL_TIMES[0].key)}
-                  className="fixed bottom-20 right-4 z-30 w-14 h-14 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white rounded-full shadow-xl flex items-center justify-center transition-transform">
-                  <Icon name="Plus" size={26}/>
-                </button>
-
-                <p className="text-[10px] text-gray-400 text-center pt-1">NEVO-online {NEVO_VERSION}, RIVM Bilthoven</p>
+                <p className="mt-5 mb-0 text-xs text-[#8494aa]">NEVO-online {NEVO_VERSION}, RIVM Bilthoven</p>
               </div>
+            )}
+
+            {tab === 'week' && (
+              <WeekSchemaPanel macros={macros} userSlug={userSlug} onImport={importWeekSchema}
+                onGoToVoeding={() => setTab('vandaag')} onGoToLijst={() => setTab('lijst')}/>
+            )}
+
+            {tab === 'lijst' && <ShoppingListPanel userSlug={userSlug} initialDate={dateStr}/>}
+
+            {tab === 'profiel' && (
+              <ProfilePanel userName={userName} userSlug={userSlug} profile={profile} macros={macros}
+                customFoods={customFoods} onAdjustKcal={handleAdjustKcal} onResetMacros={handleResetMacros}
+                onEditProfile={() => { setEditingProfile(true); }} onDeleteCustomFood={deleteCustomFood}
+                onOpenRepeatDay={() => { setTab('vandaag'); setShowRepeatDay(true); }} onLogout={handleLogout}/>
             )}
           </>
         )}
-
-        {tab === 'weekschema' && (
-          profile && macros ? (
-            <WeekSchemaPanel macros={macros} userSlug={userSlug} onImport={importWeekSchema} onGoToVoeding={() => setTab('voeding')}/>
-          ) : (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
-              <Icon name="Calendar" size={28} className="mx-auto text-gray-300 mb-3"/>
-              <h2 className="text-sm font-semibold text-gray-900 mb-1">Stel eerst je profiel in</h2>
-              <p className="text-xs text-gray-500 mb-4">Je macro's zijn nodig voor een persoonlijk weekschema.</p>
-              <button onClick={() => setTab('voeding')} className="text-sm text-white bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded-xl">Naar voeding →</button>
-            </div>
-          )
-        )}
-
-        {tab === 'training' && <TrainingPlaceholder/>}
-
       </main>
 
-      {/* Bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#182a48] border-t border-[#2b3e60] shadow-lg">
-        <div className="max-w-2xl mx-auto flex">
-          {[{id:'voeding',label:'Voeding',icon:'UtensilsCrossed'},{id:'weekschema',label:'Weekplan',icon:'Calendar'},{id:'training',label:'Training',icon:'Dumbbell'}].map(({id,label,icon})=>(
-            <button key={id} onClick={()=>setTab(id)}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-3 transition-colors ${tab===id?'text-orange-400':'text-blue-300 active:text-blue-100'}`}>
-              <Icon name={icon} size={22}/>
-              <span className={`font-logo text-[10px] font-semibold uppercase tracking-wide ${tab===id?'text-orange-400':'text-blue-300'}`}>{label}</span>
-              {tab===id&&<span className="w-4 h-0.5 bg-orange-400 rounded-full"/>}
-            </button>
-          ))}
+      {/* Toevoegknop — staat boven de nav en enkel op Vandaag */}
+      {!setupNodig && tab === 'vandaag' && (
+        <button onClick={() => openAddOverlay(moment ? moment.key : MEAL_TIMES[0].key)} aria-label="Voeding toevoegen"
+          className="fixed z-30 w-[62px] h-[62px] rounded-[22px] bg-[#182a48] text-white flex items-center justify-center active:scale-95 transition-transform"
+          style={{ right: 'max(22px, calc(50vw - 224px + 22px))', bottom: 'calc(100px + env(safe-area-inset-bottom,0px))', boxShadow: '0 14px 30px rgba(24,42,72,.34)' }}>
+          <Icon name="Plus" size={26}/>
+        </button>
+      )}
+
+      {/* Bevestiging met ongedaan maken — boven de sheets, die zitten op z-50 */}
+      {toast && (
+        <div className="fixed z-[60] left-0 right-0 mx-auto max-w-md px-6"
+             style={{ bottom: 'calc(104px + env(safe-area-inset-bottom,0px))' }}>
+          <div className="flex items-center gap-3 bg-[#182a48] rounded-2xl px-[18px] py-3.5"
+               style={{ animation: 'qv-toast .24s cubic-bezier(.22,1,.36,1)', boxShadow: '0 14px 30px rgba(20,34,60,.28)' }}>
+            <span className="text-[#f97316] shrink-0"><Icon name="CheckCircle2" size={17}/></span>
+            <span className="flex-1 min-w-0 truncate font-semibold text-sm text-white">{toast.text}</span>
+            <button onClick={undoToast} className="shrink-0 font-bold text-[13px] text-[#f97316]">Ongedaan</button>
+          </div>
         </div>
-        <div style={{height:'env(safe-area-inset-bottom,0px)'}} className="bg-[#182a48]"/>
-      </nav>
+      )}
+
+      {/* Bottom nav */}
+      {!setupNodig && (
+        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#dfe3ea]"
+             style={{ background: 'rgba(247,245,240,.94)', backdropFilter: 'blur(8px)' }}>
+          <div className="max-w-md mx-auto flex gap-1 px-3 pt-2.5"
+               style={{ paddingBottom: 'calc(10px + env(safe-area-inset-bottom,0px))' }}>
+            {APP_TABS.map(t => {
+              const on = tab === t.id;
+              return (
+                <button key={t.id} onClick={() => setTab(t.id)}
+                  className="flex-1 flex flex-col items-center gap-1.5 py-2"
+                  style={{ color: on ? QV.navy : QV.ink3 }}>
+                  <Icon name={t.icon} size={22}/>
+                  <span className="font-logo text-[11px] font-semibold uppercase tracking-wide">{t.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }
