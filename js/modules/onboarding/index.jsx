@@ -1,4 +1,21 @@
 // ─── modules/onboarding — profiel setup wizard ───────────────────────────────
+
+// Veld staat bewust op modulescope, niet binnen SetupWizard.
+// Een component die in een render-functie wordt gedefinieerd, krijgt bij elke
+// toetsaanslag een nieuwe identiteit: React ziet dan een ander componenttype,
+// gooit het invoerveld weg en bouwt het opnieuw op. De focus gaat verloren en op
+// een telefoon klapt het toetsenbord na elk cijfer dicht.
+const WIZARD_VELD = 'w-full bg-[#f7f5f0] border border-[#dfe3ea] rounded-2xl px-4 py-3 text-[15px] text-[#14223c] focus:outline-none focus:border-[#182a48]';
+
+function Veld({ label, children }) {
+  return (
+    <div>
+      <Eyebrow className="mb-1.5">{label}</Eyebrow>
+      {children}
+    </div>
+  );
+}
+
 function SetupWizard({ onComplete, onCancel, initial }) {
   const [form, setForm] = useState(() => initial ? {
     weight: String(initial.weight), height: String(initial.height), age: String(initial.age),
@@ -14,15 +31,6 @@ function SetupWizard({ onComplete, onCancel, initial }) {
     onComplete({ weight: w, height: h, age: a, gender: form.gender, activity: form.activity, goal: form.goal, sporterType: form.sporterType, macroProfile: form.macroProfile });
   }
 
-  const veldKlasse = 'w-full bg-[#f7f5f0] border border-[#dfe3ea] rounded-2xl px-4 py-3 text-[15px] text-[#14223c] focus:outline-none focus:border-[#182a48]';
-
-  const Veld = ({ label, children }) => (
-    <div>
-      <Eyebrow className="mb-1.5">{label}</Eyebrow>
-      {children}
-    </div>
-  );
-
   return (
     <div className="bg-white border border-[#dfe3ea] rounded-[22px] p-5">
       <p className="m-0 mb-5 text-[13px] leading-relaxed text-[#4a5568]" style={{ textWrap: 'pretty' }}>
@@ -32,42 +40,42 @@ function SetupWizard({ onComplete, onCancel, initial }) {
         <div className="grid grid-cols-2 gap-3">
           <Veld label="Gewicht (kg)">
             <input type="number" inputMode="decimal" value={form.weight} placeholder="80"
-              onChange={e => update('weight', e.target.value)} className={veldKlasse}/>
+              onChange={e => update('weight', e.target.value)} className={WIZARD_VELD}/>
           </Veld>
           <Veld label="Lengte (cm)">
             <input type="number" inputMode="decimal" value={form.height} placeholder="180"
-              onChange={e => update('height', e.target.value)} className={veldKlasse}/>
+              onChange={e => update('height', e.target.value)} className={WIZARD_VELD}/>
           </Veld>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Veld label="Leeftijd">
             <input type="number" inputMode="numeric" value={form.age} placeholder="30"
-              onChange={e => update('age', e.target.value)} className={veldKlasse}/>
+              onChange={e => update('age', e.target.value)} className={WIZARD_VELD}/>
           </Veld>
           <Veld label="Geslacht">
-            <select value={form.gender} onChange={e => update('gender', e.target.value)} className={veldKlasse}>
+            <select value={form.gender} onChange={e => update('gender', e.target.value)} className={WIZARD_VELD}>
               <option value="man">Man</option><option value="vrouw">Vrouw</option>
             </select>
           </Veld>
         </div>
         <Veld label="Activiteitsniveau">
-          <select value={form.activity} onChange={e => update('activity', e.target.value)} className={veldKlasse}>
+          <select value={form.activity} onChange={e => update('activity', e.target.value)} className={WIZARD_VELD}>
             {Object.entries(ACTIVITY_FACTORS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
         </Veld>
         <Veld label="Doel">
-          <select value={form.goal} onChange={e => update('goal', e.target.value)} className={veldKlasse}>
+          <select value={form.goal} onChange={e => update('goal', e.target.value)} className={WIZARD_VELD}>
             {Object.entries(GOALS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
         </Veld>
         <Veld label="Macroprofiel">
-          <select value={form.macroProfile} onChange={e => update('macroProfile', e.target.value)} className={veldKlasse}>
+          <select value={form.macroProfile} onChange={e => update('macroProfile', e.target.value)} className={WIZARD_VELD}>
             {Object.entries(MACRO_PROFILES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
         </Veld>
         {form.macroProfile === 'normal' && (
           <Veld label="Type sporter">
-            <select value={form.sporterType} onChange={e => update('sporterType', e.target.value)} className={veldKlasse}>
+            <select value={form.sporterType} onChange={e => update('sporterType', e.target.value)} className={WIZARD_VELD}>
               {Object.entries(SPORTER_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
           </Veld>
