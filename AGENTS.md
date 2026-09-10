@@ -29,6 +29,8 @@ qvolve.html           — entry-point; laadt alle scripts in volgorde
 manifest.json         — PWA-manifest
 sw.js                 — service worker (network-first voor html/js/jsx)
 vercel.json           — rewrite root → qvolve.html
+githooks/
+  pre-commit          — houdt AGENTS.md gelijk aan CLAUDE.md
 api/
   gemini.js           — serverless proxy naar Gemini (GEMINI_API_KEY env-var)
   off-search.js       — serverless proxy naar Open Food Facts tekstzoeken
@@ -373,11 +375,29 @@ SetupWizard: gewicht/lengte/leeftijd/geslacht/activiteit/doel/macroprofiel
 - Elke module is zelfstandig te bewerken; zorg dat globals die je gebruikt
   beschikbaar zijn in eerder geladen bestanden (zie laadvolgorde hierboven).
 
+### Projectregels: `CLAUDE.md` is de bron, `AGENTS.md` de kopie
+
+Claude Code leest `CLAUDE.md`, Codex leest `AGENTS.md`. Ze moeten identiek zijn,
+dus **bewerk altijd `CLAUDE.md`** — `githooks/pre-commit` kopieert hem bij elke
+commit naar `AGENTS.md` en zet die mee in de commit. Bewerk je per ongeluk enkel
+`AGENTS.md`, dan blokkeert de hook de commit in plaats van je werk te
+overschrijven.
+
+De hook zit in `githooks/` in plaats van `.git/hooks/`, zodat hij mee de repo in
+gaat. Eenmalig per kloon aanzetten:
+
+```
+git config core.hooksPath githooks
+```
+
+`.gitattributes` pint beide bestanden op LF; zonder dat ziet de hook op Windows
+een verschil dat er niet is.
+
 ### Claude Code-hulpmiddelen (`.claude/`)
 
 Deze map is versiebeheerd (alleen `settings.local.json`, `cost-log.json`,
-`tools/` en `worktrees/` zijn genegeerd, net als `.superpowers/` in de
-projectroot), zodat de hulpmiddelen mee in de repo zitten:
+`tools/` en `worktrees/` zijn genegeerd, net als `.superpowers/`, `.agents/` en
+`.codex/` in de projectroot), zodat de hulpmiddelen mee in de repo zitten:
 
 - `serve.ps1` — de lokale dev-server (zie hieronder).
 - `hooks/check-jsx.js` — PostToolUse-hook, de vervanger voor de ontbrekende
