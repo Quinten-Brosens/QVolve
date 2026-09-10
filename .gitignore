@@ -14,3 +14,7 @@
 # OS-bestanden
 Thumbs.db
 .DS_Store
+
+# Codex-gereedschap — lokaal, niet versiebeheerd (AGENTS.md wel)
+.agents/
+.codex/
