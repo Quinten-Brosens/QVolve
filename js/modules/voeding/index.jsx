@@ -1,6 +1,7 @@
-// ─── modules/voeding — dagboek, voedingszoekopdracht, overlay ─────────────────
+// ─── modules/voeding — dagboek, voedingszoekopdracht, toevoeg-sheet ───────────
 
 const HTML5_QRCODE_SRC = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+const VOEDING_HISTORY_DAYS = 45; // hoever "wat je vaak eet" terugkijkt
 
 function BarcodeScanner({ onDetected, onClose }) {
   const [error, setError] = useState('');
@@ -50,41 +51,79 @@ function BarcodeScanner({ onDetected, onClose }) {
       try {
         const p = inst.stop();
         if (p && p.then) p.then(() => { try { inst.clear(); } catch (e) {} }).catch(() => {});
-      } catch (e) {
-        try { inst.clear(); } catch (e2) {}
-      }
+      } catch (e) {}
     };
   }, []);
 
   return (
-    <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-sm">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-semibold text-white">Scan een barcode</span>
-          <button onClick={onClose} className="text-white/70 hover:text-white"><Icon name="X" size={20}/></button>
-        </div>
-        <div id="qvolve-barcode-reader" className="w-full rounded-2xl overflow-hidden bg-black min-h-[200px]" />
-        {loading && !error && <p className="text-xs text-white/70 mt-3 flex items-center gap-2"><Icon name="Loader2" size={13}/> Camera starten…</p>}
-        {error && <p className="text-xs text-red-300 bg-red-950/50 rounded-lg px-3 py-2 mt-3">{error}</p>}
-        {!error && <p className="text-[11px] text-white/50 mt-3 text-center">Richt op de streepjescode van het product.</p>}
+    <div className="fixed inset-0 z-[70] bg-[#14223c] flex flex-col">
+      <div className="h-14 shrink-0 flex items-center gap-3 px-4">
+        <button onClick={onClose} className="text-white/70 active:text-white p-1 -ml-1"><Icon name="ArrowLeft" size={20}/></button>
+        <span className="font-logo font-bold text-base text-white tracking-wide flex-1">Scan barcode</span>
+      </div>
+      <div className="flex-1 flex flex-col items-center justify-center px-6">
+        <div id="qvolve-barcode-reader" className="w-full max-w-sm rounded-2xl overflow-hidden"/>
+        {loading && !error && <p className="mt-4 text-sm text-white/60 flex items-center gap-2"><Icon name="Loader2" size={14}/> Camera starten…</p>}
+        {error && (
+          <div className="mt-4 max-w-sm text-center">
+            <p className="text-sm text-[#f97316]">{error}</p>
+            <button onClick={onClose} className="mt-4 px-5 py-2.5 rounded-xl bg-white/10 border border-white/25 text-white text-sm font-semibold">Sluiten</button>
+          </div>
+        )}
+        {!loading && !error && <p className="mt-4 text-sm text-white/60">Richt op de streepjescode van het product.</p>}
       </div>
     </div>
   );
 }
 
-// ─── AddFoodOverlay ───────────────────────────────────────────────────────────
-function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remaining }) {
+// ─── Wat je vaak eet ──────────────────────────────────────────────────────────
+// De namen uit je recente logboek opgezocht in de zoekpool, zodat we voor elk
+// item de waarden per 100 g hebben en het gram-scherm kan rekenen. Eigen
+// producten sluiten de rij, ook als je ze nog nooit logde.
+function frequentFoods(userSlug, dateStr, pool, customFoods, limit = 8) {
+  const telling = new Map();
+  for (let i = 0; i <= VOEDING_HISTORY_DAYS; i++) {
+    const dag = lsGet(`daily-log:${userSlug}:${addDays(dateStr, -i)}`);
+    if (!Array.isArray(dag)) continue;
+    for (const e of dag) {
+      if (!e.name) continue;
+      const k = e.name.toLowerCase();
+      telling.set(k, (telling.get(k) || 0) + 1);
+    }
+  }
+  const perNaam = new Map();
+  for (const f of pool) {
+    if (!f.perGram) continue;
+    const k = f.name.toLowerCase();
+    if (telling.has(k) && !perNaam.has(k)) perNaam.set(k, { food: f, n: telling.get(k) });
+  }
+  const uit = [...perNaam.values()].sort((a, b) => b.n - a.n).slice(0, limit).map(v => v.food);
+  for (const c of customFoods) {
+    if (uit.length >= limit) break;
+    if (!uit.some(f => f.id === c.id)) uit.push(c);
+  }
+  return uit;
+}
+
+// ─── AddFoodOverlay — het toevoeg-sheet ───────────────────────────────────────
+// Eén sheet met stappen: zoeken → afwegen. De overige manieren om iets te loggen
+// (foto, zelf ingeven, AI-schatting, AI-voorstel) zijn eigen stappen achter de
+// knoppenrij onder het zoekveld.
+function AddFoodOverlay({ pool, customFoods = [], userSlug, dateStr, onAdd, onSaveCustom, onClose, initialMeal, remaining }) {
   const [activeMeal, setActiveMeal] = useState(initialMeal || MEAL_TIMES[0].key);
-  const [tab, setTab] = useState('search');
+  const [showMealPicker, setShowMealPicker] = useState(false);
+  const [step, setStep] = useState('search');
 
   const [query, setQuery] = useState('');
-  const [staged, setStaged] = useState([]);
   const [offResults, setOffResults] = useState([]);
   const [offLoading, setOffLoading] = useState(false);
   const [offError, setOffError] = useState('');
   const [scanning, setScanning] = useState(false);
   const [barcodeMsg, setBarcodeMsg] = useState('');
   const [barcodeLoading, setBarcodeLoading] = useState(false);
+
+  const [sel, setSel] = useState(null);
+  const [grams, setGrams] = useState(100);
 
   const emptyManual = { name: '', kcal: '', protein: '', carbs: '', fat: '' };
   const [manual, setManual] = useState(emptyManual);
@@ -103,6 +142,13 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
   const [sugLoading, setSugLoading] = useState(false);
   const [suggestion, setSuggestion] = useState(null);
   const [sugError, setSugError] = useState('');
+
+  const mealLabel = MEAL_TIMES.find(m => m.key === activeMeal)?.label || 'maaltijd';
+
+  const library = useMemo(
+    () => frequentFoods(userSlug, dateStr, pool, customFoods),
+    [userSlug, dateStr, pool, customFoods]
+  );
 
   const results = useMemo(() => {
     if (!query.trim()) return [];
@@ -128,54 +174,49 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
     return () => { active = false; clearTimeout(t); };
   }, [query]);
 
+  const nieuwId = () => `log-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  // Een product kiezen: per 100 g → afweegstap, vaste portie → meteen loggen.
+  function pick(item) {
+    if (!item.perGram) {
+      onAdd([{ id: nieuwId(), name: item.name, grams: null, kcal: item.kcal, protein: item.protein, fat: item.fat, carbs: item.carbs, source: item.source || 'custom', portionDescription: item.portionDescription }], activeMeal);
+      setQuery('');
+      return;
+    }
+    setSel(item);
+    setGrams(item.servingQty || 100);
+    setStep('weigh');
+  }
+
+  function basePortion(item) { return item?.servingQty || 100; }
+
+  function scaled(item, g) {
+    const r = v => Math.round(((Number(v) || 0) * g) / 100);
+    return { kcal: r(item.kcal), protein: r(item.protein), fat: r(item.fat), carbs: r(item.carbs) };
+  }
+
+  function confirmWeigh() {
+    if (!sel) return;
+    const g = Math.max(1, Math.round(grams) || 0);
+    onAdd([{
+      id: nieuwId(), name: sel.name, grams: g,
+      kcal: (sel.kcal * g) / 100, protein: (sel.protein * g) / 100,
+      fat: (sel.fat * g) / 100, carbs: (sel.carbs * g) / 100,
+      source: sel.source || 'nevo',
+    }], activeMeal);
+    // Sheet blijft open op de zoekstap: zo log je een maaltijd met meerdere
+    // ingrediënten zonder telkens opnieuw te openen. De toast bevestigt.
+    setSel(null); setQuery(''); setStep('search');
+  }
+
   async function handleBarcode(code) {
     setScanning(false); setBarcodeMsg(''); setBarcodeLoading(true);
     try {
       const item = await lookupOffBarcode(code);
-      if (item) {
-        addToStaged(item);
-        setBarcodeMsg(`✓ ${item.name} toegevoegd${item.servingLabel ? ` — 1 portie = ${item.servingLabel}` : ''}. Pas de hoeveelheid aan indien nodig.`);
-      } else {
-        setBarcodeMsg(`Barcode ${code} niet gevonden. Voeg het handmatig toe via "Zelf ingeven".`);
-      }
+      if (item) pick(item);
+      else setBarcodeMsg(`Barcode ${code} niet gevonden. Voeg het handmatig toe via "Zelf ingeven".`);
     } catch (e) { setBarcodeMsg('Opzoeken mislukt: ' + (e.message || '')); }
     setBarcodeLoading(false);
-  }
-
-  const fmtG = v => { v = Number(v) || 0; return v > 0 && v < 10 ? Math.round(v * 10) / 10 : Math.round(v); };
-  const renderRow = (item) => (
-    <button key={item.id} onClick={() => addToStaged(item)} className="w-full text-left px-3 py-2.5 hover:bg-orange-50 flex items-center justify-between gap-2">
-      <div className="min-w-0 flex-1">
-        <p className="text-sm text-gray-800 truncate">{item.name}</p>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[11px]">
-          <span className="text-orange-500 font-medium">{Math.round(item.kcal)} kcal{item.perGram ? '/100g' : ''}</span>
-          <span className="text-gray-300">·</span>
-          <span className="text-[#2f8bff]">E {fmtG(item.protein)}g</span>
-          <span className="text-[#1e3a8a]">KH {fmtG(item.carbs)}g</span>
-          <span className="text-[#f59e0b]">V {fmtG(item.fat)}g</span>
-        </div>
-      </div>
-      <Icon name="Plus" size={14} className="text-orange-400 shrink-0"/>
-    </button>
-  );
-
-  function addToStaged(item) {
-    const defaultGrams = item.servingQty || (item.perGram ? 100 : null);
-    setStaged(s => [...s, { ...item, stagedId: `s-${Date.now()}-${Math.random().toString(36).slice(2)}`, grams: defaultGrams }]);
-    setQuery('');
-  }
-  function updateGrams(id, g) { setStaged(s => s.map(it => it.stagedId === id ? { ...it, grams: g } : it)); }
-  function removeStaged(id) { setStaged(s => s.filter(it => it.stagedId !== id)); }
-
-  function confirmAll() {
-    const entries = staged.map(item => {
-      if (item.perGram) {
-        const g = parseFloat(item.grams) || 0;
-        return { id: `log-${Date.now()}-${Math.random()}`, name: item.name, grams: g, kcal: (item.kcal * g) / 100, protein: (item.protein * g) / 100, fat: (item.fat * g) / 100, carbs: (item.carbs * g) / 100, source: item.source || 'nevo' };
-      }
-      return { id: `log-${Date.now()}-${Math.random()}`, name: item.name, grams: null, kcal: item.kcal, protein: item.protein, fat: item.fat, carbs: item.carbs, source: 'custom', portionDescription: item.portionDescription };
-    });
-    onAdd(entries, activeMeal); setStaged([]); onClose();
   }
 
   function handleManualSave(addToLog) {
@@ -185,8 +226,9 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
     if ([kcal, protein, carbs, fat].some(isNaN)) { setManualError('Vul alle waarden in als getal.'); return; }
     const food = { id: `custom-${Date.now()}`, name: manual.name.trim(), kcal, protein, carbs, fat, fiber: 0, perGram: true, group: 'Eigen voedingsmiddelen' };
     onSaveCustom(food);
-    if (addToLog) { addToStaged(food); setTab('search'); setManual(emptyManual); }
-    else { setManualSaved(true); setManual(emptyManual); setTimeout(() => setManualSaved(false), 3000); }
+    setManual(emptyManual);
+    if (addToLog) pick(food);
+    else { setManualSaved(true); setTimeout(() => setManualSaved(false), 3000); }
   }
 
   async function handleAiEstimate() {
@@ -198,7 +240,7 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
   }
 
   function addAiResult(alsoSave) {
-    onAdd([{ id: `log-${Date.now()}-${Math.random()}`, name: aiResult.name, grams: null, kcal: aiResult.kcal, protein: aiResult.protein, fat: aiResult.fat, carbs: aiResult.carbs, source: 'ai', portionDescription: aiResult.portionDescription }], activeMeal);
+    onAdd([{ id: nieuwId(), name: aiResult.name, grams: null, kcal: aiResult.kcal, protein: aiResult.protein, fat: aiResult.fat, carbs: aiResult.carbs, source: 'ai', portionDescription: aiResult.portionDescription }], activeMeal);
     if (alsoSave) onSaveCustom({ id: `custom-${Date.now()}`, name: aiResult.name, kcal: aiResult.kcal, protein: aiResult.protein, fat: aiResult.fat, carbs: aiResult.carbs, perGram: false, portionDescription: aiResult.portionDescription });
     onClose();
   }
@@ -211,288 +253,388 @@ function AddFoodOverlay({ pool, onAdd, onSaveCustom, onClose, initialMeal, remai
     if (sugCarbs.trim()) targets.carbs = parseFloat(sugCarbs);
     if (Object.keys(targets).length === 0) { setSugError('Vul minstens één doelwaarde in.'); return; }
     setSugLoading(true); setSugError(''); setSuggestion(null);
-    try {
-      const lbl = MEAL_TIMES.find(m => m.key === activeMeal)?.label || 'maaltijd';
-      setSuggestion(await suggestMealWithAI(targets, lbl));
-    } catch (e) { setSugError(e.message || 'Kon geen suggestie maken.'); }
+    try { setSuggestion(await suggestMealWithAI(targets, mealLabel)); }
+    catch (e) { setSugError(e.message || 'Kon geen suggestie maken.'); }
     setSugLoading(false);
   }
 
   function addSuggestion() {
-    onAdd([{ id: `log-${Date.now()}-${Math.random()}`, name: suggestion.title, grams: null, kcal: suggestion.kcal, protein: suggestion.protein, fat: suggestion.fat, carbs: suggestion.carbs, source: 'ai', portionDescription: [(suggestion.ingredients || []).join(', '), suggestion.description].filter(Boolean).join(' — ') }], activeMeal);
+    onAdd([{ id: nieuwId(), name: suggestion.title, grams: null, kcal: suggestion.kcal, protein: suggestion.protein, fat: suggestion.fat, carbs: suggestion.carbs, source: 'ai', portionDescription: [(suggestion.ingredients || []).join(', '), suggestion.description].filter(Boolean).join(' — ') }], activeMeal);
     onClose();
   }
 
-  return (
-    <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
-      {scanning && <BarcodeScanner onDetected={handleBarcode} onClose={() => setScanning(false)} />}
+  const fmtG = v => { v = Number(v) || 0; return v > 0 && v < 10 ? Math.round(v * 10) / 10 : Math.round(v); };
 
-      <div className="bg-[#182a48] border-b border-[#2b3e60] px-4 flex items-center gap-3 h-14 shrink-0">
-        <button onClick={onClose} className="text-white/70 hover:text-white p-1 -ml-1"><Icon name="ArrowLeft" size={20}/></button>
-        <span className="font-logo text-base font-bold text-white tracking-wide flex-1">Voeg toe</span>
-        <span className="text-xs text-white/50">{MEAL_TIMES.find(m => m.key === activeMeal)?.label}</span>
-      </div>
+  const productRij = (item) => (
+    <button key={item.id} onClick={() => pick(item)}
+      className="w-full flex items-center gap-3.5 bg-[#f7f5f0] border border-[#dfe3ea] rounded-[18px] px-4 py-3.5 text-left
+        active:scale-[.98] active:border-[#182a48] transition-transform shrink-0">
+      <span className="w-9 h-9 rounded-xl bg-[#e6ecf6] flex items-center justify-center font-logo font-semibold text-[15px] text-[#35507d] shrink-0">
+        {item.name.charAt(0).toUpperCase()}
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="block font-semibold text-[15px] text-[#14223c] truncate">{item.name}</span>
+        <span className="block mt-0.5 text-xs text-[#4a5568]">
+          {Math.round(item.kcal)} kcal{item.perGram ? ' / 100 g' : ''} · {fmtG(item.protein)} g eiwit
+        </span>
+      </span>
+      <span className="text-[#c2410c] shrink-0"><Icon name="Plus" size={17}/></span>
+    </button>
+  );
 
-      <div className="bg-white border-b border-gray-100 px-4 py-2 shrink-0 overflow-x-auto">
-        <MealTimeSelector active={activeMeal} onChange={setActiveMeal}/>
-      </div>
+  const terugKnop = (
+    <button onClick={() => { setStep('search'); setSel(null); }}
+      className="flex items-center gap-2 font-semibold text-[13px] text-[#4a5568] shrink-0">
+      <Icon name="ArrowLeft" size={15}/> Terug
+    </button>
+  );
 
-      <div className="bg-white border-b border-gray-100 px-4 py-2 shrink-0">
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-          {[{ id: 'search', label: 'Zoeken' }, { id: 'photo', label: 'Foto', icon: 'Camera' }, { id: 'manual', label: 'Zelf' }, { id: 'describe', label: 'Schatting' }, { id: 'suggest', label: 'Voorstel' }].map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} className={`flex-1 py-1 rounded-md text-[11px] font-medium transition-colors flex items-center justify-center gap-1 ${tab === t.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>
-              {t.icon && <Icon name={t.icon} size={11}/>}{t.label}
+  // ─── Stap: afwegen ─────────────────────────────────────────────────────────
+  if (step === 'weigh' && sel) {
+    const sc = scaled(sel, grams);
+    const basis = basePortion(sel);
+    const porties = [
+      { label: sel.servingLabel ? `1 portie (${basis} g)` : `Portie (${basis} g)`, v: basis },
+      { label: '100 g', v: 100 },
+      { label: 'Half', v: Math.max(5, Math.round(basis / 2)) },
+    ].filter((p, i, arr) => arr.findIndex(x => x.v === p.v) === i);
+    return (
+      <Sheet onClose={onClose}>
+        {terugKnop}
+        <p className="mt-3.5 mb-0 font-logo font-bold text-2xl text-[#14223c]">{sel.name}</p>
+        <p className="mt-1.5 mb-0 text-[13px] text-[#4a5568]">
+          {Math.round(sel.kcal)} kcal per 100 g · {sel.source === 'off' ? 'Open Food Facts' : (sel.group === 'Eigen voedingsmiddelen' ? 'eigen product' : 'NEVO')}
+        </p>
+
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar">
+          <div className="flex items-center justify-center gap-5 mt-6">
+            <button onClick={() => setGrams(g => Math.max(5, g - 10))} aria-label="10 gram minder"
+              className="w-[58px] h-[58px] shrink-0 rounded-[20px] bg-[#f7f5f0] border border-[#dfe3ea] flex items-center justify-center text-[#14223c] active:scale-95 transition-transform">
+              <Icon name="Minus" size={22}/>
             </button>
-          ))}
+            <div className="min-w-[130px] text-center">
+              <input type="number" inputMode="numeric" value={grams}
+                onChange={e => setGrams(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0))}
+                onBlur={() => setGrams(g => Math.max(5, parseInt(g) || 5))}
+                className="w-full bg-transparent text-center font-logo font-bold text-[54px] leading-none tabular-nums text-[#14223c] focus:outline-none"/>
+              <p className="mt-0.5 mb-0 font-logo font-semibold text-[13px] tracking-[.14em] text-[#4a5568]">GRAM</p>
+            </div>
+            <button onClick={() => setGrams(g => (parseInt(g) || 0) + 10)} aria-label="10 gram meer"
+              className="w-[58px] h-[58px] shrink-0 rounded-[20px] bg-[#f7f5f0] border border-[#dfe3ea] flex items-center justify-center text-[#14223c] active:scale-95 transition-transform">
+              <Icon name="Plus" size={22}/>
+            </button>
+          </div>
+
+          <div className="flex gap-2 justify-center flex-wrap mt-4">
+            {porties.map(p => {
+              const on = Number(grams) === p.v;
+              return (
+                <button key={p.label} onClick={() => setGrams(p.v)}
+                  className={`px-4 py-2 rounded-full text-[13px] font-semibold border transition-colors
+                    ${on ? 'bg-[#182a48] text-white border-[#182a48]' : 'bg-[#f7f5f0] text-[#14223c] border-[#dfe3ea]'}`}>
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex mt-6 bg-[#182a48] rounded-[20px] px-[18px] py-4">
+            {[['kcal', sc.kcal, QV.orange], ['g eiwit', sc.protein, '#fff'], ['g KH', sc.carbs, '#fff'], ['g vet', sc.fat, '#fff']].map(([l, v, c]) => (
+              <div key={l} className="flex-1 text-center">
+                <p className="m-0 font-logo font-bold text-[22px] tabular-nums" style={{ color: c }}>{v}</p>
+                <p className="mt-0.5 mb-0 text-[11px] font-medium text-white/70">{l}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4">
+            <PrimaryButton onClick={confirmWeigh}>
+              <Icon name="CheckCircle2" size={19}/> Toevoegen aan {mealLabel.toLowerCase()}
+            </PrimaryButton>
+          </div>
         </div>
-      </div>
+      </Sheet>
+    );
+  }
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+  // ─── Stap: foto ────────────────────────────────────────────────────────────
+  if (step === 'photo') {
+    return (
+      <Sheet onClose={onClose}>
+        {terugKnop}
+        <p className="mt-3.5 mb-4 font-logo font-bold text-2xl text-[#14223c] shrink-0">Foto van je maaltijd</p>
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar">
+          <PhotoTab mealLabel={mealLabel} onConfirm={entries => { onAdd(entries, activeMeal); onClose(); }}/>
+        </div>
+      </Sheet>
+    );
+  }
 
-        {tab === 'search' && (
-          <div className="space-y-3">
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><Icon name="Search" size={15}/></span>
-                <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="Zoek voedingsmiddel of merk..."
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white" />
-              </div>
-              <button onClick={() => { setBarcodeMsg(''); setScanning(true); }} title="Scan barcode"
-                className="shrink-0 flex items-center gap-1.5 px-3 rounded-xl bg-[#2f8bff] hover:bg-[#2076e8] text-white text-xs font-medium">
-                <Icon name="Camera" size={15}/> Scan
-              </button>
-            </div>
-            {barcodeLoading && <p className="text-xs text-gray-500 flex items-center gap-1.5"><Icon name="Loader2" size={12}/> Barcode opzoeken…</p>}
-            {barcodeMsg && <p className="text-xs px-3 py-2 rounded-xl bg-blue-50 text-blue-700">{barcodeMsg}</p>}
-            {query.trim() && (
-              <div className="space-y-3">
-                {results.length > 0 && (
-                  <div>
-                    <p className="text-[11px] font-medium text-gray-400 px-1 mb-1">NEVO &amp; eigen producten</p>
-                    <div className="bg-white border border-gray-100 rounded-xl divide-y divide-gray-50">
-                      {results.map(renderRow)}
-                    </div>
-                  </div>
-                )}
-                <div>
-                  <p className="text-[11px] font-medium text-gray-400 px-1 mb-1 flex items-center gap-1.5">
-                    Merkproducten · Open Food Facts {offLoading && <Icon name="Loader2" size={11}/>}
-                  </p>
-                  {offResults.length > 0 ? (
-                    <div className="bg-white border border-gray-100 rounded-xl divide-y divide-gray-50">
-                      {offResults.map(renderRow)}
-                    </div>
-                  ) : (
-                    !offLoading && <p className="text-xs text-gray-300 px-1">{query.trim().length < 3 ? 'Typ minstens 3 tekens voor merkproducten…' : offError || 'Geen merkproducten gevonden.'}</p>
-                  )}
+  // ─── Stap: zelf ingeven ────────────────────────────────────────────────────
+  if (step === 'manual') {
+    const velden = [
+      { key: 'kcal', label: 'Calorieën', unit: 'kcal' },
+      { key: 'protein', label: 'Eiwitten', unit: 'g' },
+      { key: 'carbs', label: 'Koolhydraten', unit: 'g' },
+      { key: 'fat', label: 'Vetten', unit: 'g' },
+    ];
+    return (
+      <Sheet onClose={onClose}>
+        {terugKnop}
+        <p className="mt-3.5 mb-0 font-logo font-bold text-2xl text-[#14223c] shrink-0">Zelf ingeven</p>
+        <p className="mt-1.5 mb-4 text-[13px] text-[#4a5568] shrink-0">Waarden <strong>per 100 g</strong>. Wordt bewaard in je eigen lijst.</p>
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar space-y-3">
+          <input value={manual.name} placeholder="Naam product, bv. Proteïnereep XYZ"
+            onChange={e => { setManual(m => ({ ...m, name: e.target.value })); setManualError(''); setManualSaved(false); }}
+            className="w-full bg-[#f7f5f0] border border-[#dfe3ea] rounded-2xl px-4 py-3.5 text-[15px] text-[#14223c] focus:outline-none focus:border-[#182a48]"/>
+          <div className="grid grid-cols-2 gap-2">
+            {velden.map(({ key, label, unit }) => (
+              <div key={key} className="bg-[#f7f5f0] border border-[#dfe3ea] rounded-2xl p-3">
+                <Eyebrow className="mb-1.5">{label}</Eyebrow>
+                <div className="flex items-center gap-1">
+                  <input type="number" inputMode="decimal" min="0" value={manual[key]} placeholder="0"
+                    onChange={e => { setManual(m => ({ ...m, [key]: e.target.value })); setManualError(''); setManualSaved(false); }}
+                    className="w-full bg-white border border-[#dfe3ea] rounded-xl px-2 py-2 text-center font-logo font-semibold text-[15px] text-[#14223c] focus:outline-none focus:border-[#182a48]"/>
+                  <span className="text-xs text-[#8494aa] shrink-0">{unit}</span>
                 </div>
               </div>
-            )}
-            {staged.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-600">Geselecteerd — vul grammen in:</p>
-                {staged.map(item => (
-                  <div key={item.stagedId} className="bg-white border border-gray-100 rounded-xl p-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-800 flex-1 min-w-0 truncate">{item.name}</span>
-                      {item.perGram ? (
-                        <div className="flex items-center gap-1 shrink-0">
-                          <input type="number" inputMode="decimal" value={item.grams} onChange={e => updateGrams(item.stagedId, e.target.value)} className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm text-center"/>
-                          <span className="text-xs text-gray-400">g</span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-400 shrink-0">vaste portie</span>
-                      )}
-                      <button onClick={() => removeStaged(item.stagedId)} className="text-gray-300 hover:text-red-500 shrink-0"><Icon name="X" size={14}/></button>
-                    </div>
-                    {item.servingLabel && item.perGram && (
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <span className="text-[11px] text-gray-400">1 portie = {item.servingLabel}</span>
-                        {Number(item.grams) !== item.servingQty && (
-                          <button onClick={() => updateGrams(item.stagedId, item.servingQty)} className="text-[11px] text-orange-500 hover:text-orange-600 underline">Gebruik portie</button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <button onClick={confirmAll} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-3 text-sm font-semibold flex items-center justify-center gap-1.5">
-                  <Icon name="Plus" size={15}/> Toevoegen ({staged.length})
-                </button>
-              </div>
-            )}
-            {!query.trim() && staged.length === 0 && (
-              <p className="text-sm text-gray-300 text-center pt-8">Zoek een voedingsmiddel hierboven of scan een barcode.</p>
-            )}
+            ))}
           </div>
-        )}
+          {manualError && <p className="m-0 text-[13px] text-[#c2410c] bg-[#f7f5f0] rounded-xl px-4 py-3">{manualError}</p>}
+          {manualSaved && <p className="m-0 text-[13px] text-[#35507d] bg-[#e6ecf6] rounded-xl px-4 py-3">Opgeslagen in je productenlijst.</p>}
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => handleManualSave(false)}
+              className="flex-1 h-12 rounded-[18px] border border-[#dfe3ea] bg-white text-[#14223c] font-semibold text-sm active:scale-[.98] transition-transform">
+              Alleen opslaan
+            </button>
+            <PrimaryButton onClick={() => handleManualSave(true)} className="flex-1 h-12 text-sm">
+              <Icon name="Plus" size={15}/> Opslaan &amp; toevoegen
+            </PrimaryButton>
+          </div>
+        </div>
+      </Sheet>
+    );
+  }
 
-        {tab === 'photo' && (
-          <PhotoTab
-            mealLabel={MEAL_TIMES.find(m => m.key === activeMeal)?.label || 'maaltijd'}
-            onConfirm={entries => { onAdd(entries, activeMeal); onClose(); }}
-          />
-        )}
-
-        {tab === 'manual' && (
-          <div className="space-y-3">
-            <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
-              <p className="text-xs text-gray-500">Voedingswaarden <strong>per 100g</strong>. Wordt opgeslagen in je persoonlijke lijst.</p>
-              <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1">Naam product</label>
-                <input value={manual.name} onChange={e => { setManual(m => ({ ...m, name: e.target.value })); setManualError(''); setManualSaved(false); }}
-                  placeholder="Bv. Proteïnereep XYZ" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {[{ key: 'kcal', label: 'Calorieën', unit: 'kcal', color: 'text-orange-500' }, { key: 'protein', label: 'Eiwitten', unit: 'g', color: 'text-blue-600' }, { key: 'carbs', label: 'Koolhydraten', unit: 'g', color: 'text-purple-600' }, { key: 'fat', label: 'Vetten', unit: 'g', color: 'text-amber-600' }].map(({ key, label, unit, color }) => (
-                  <div key={key} className="bg-gray-50 rounded-xl p-3">
-                    <label className={`text-[11px] font-semibold ${color} block mb-1`}>{label}</label>
-                    <div className="flex items-center gap-1">
-                      <input type="number" inputMode="decimal" min="0" value={manual[key]} onChange={e => { setManual(m => ({ ...m, [key]: e.target.value })); setManualError(''); setManualSaved(false); }} placeholder="0"
-                        className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-orange-400" />
-                      <span className="text-xs text-gray-400 flex-shrink-0">{unit}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {manualError && <p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">{manualError}</p>}
-              {manualSaved && <p className="text-xs text-orange-500 bg-orange-50 rounded-lg px-3 py-2">✓ Opgeslagen in je productenlijst!</p>}
+  // ─── Stap: AI-schatting ────────────────────────────────────────────────────
+  if (step === 'describe') {
+    return (
+      <Sheet onClose={onClose}>
+        {terugKnop}
+        <p className="mt-3.5 mb-0 font-logo font-bold text-2xl text-[#14223c] shrink-0">AI-schatting</p>
+        <p className="mt-1.5 mb-4 text-[13px] text-[#4a5568] shrink-0">Beschrijf wat je at, de AI schat de macro's.</p>
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar space-y-3">
+          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
+            placeholder="Bv. 150 g kipfilet met rijst en broccoli"
+            className="w-full bg-[#f7f5f0] border border-[#dfe3ea] rounded-2xl px-4 py-3.5 text-[15px] text-[#14223c] resize-none focus:outline-none focus:border-[#182a48]"/>
+          <button onClick={handleAiEstimate} disabled={aiLoading || !description.trim()}
+            className="w-full h-12 rounded-[18px] bg-[#2f8bff] text-white font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[.98] transition-transform">
+            {aiLoading ? <Icon name="Loader2" size={15}/> : <Icon name="Sparkles" size={15}/>}
+            {aiLoading ? 'Schatten…' : "Schat macro's"}
+          </button>
+          {aiError && <p className="m-0 text-[13px] text-[#c2410c] bg-[#f7f5f0] rounded-xl px-4 py-3">{aiError}</p>}
+          {aiResult && (
+            <div className="bg-[#f7f5f0] border border-[#dfe3ea] rounded-[18px] p-4 space-y-2">
+              <p className="m-0 font-semibold text-[15px] text-[#14223c]">{aiResult.name}</p>
+              {aiResult.portionDescription && <p className="m-0 text-xs text-[#4a5568]">{aiResult.portionDescription}</p>}
+              <p className="m-0 text-[13px] text-[#4a5568]">
+                {Math.round(aiResult.kcal)} kcal · {Math.round(aiResult.protein)} g eiwit · {Math.round(aiResult.fat)} g vet · {Math.round(aiResult.carbs)} g KH
+              </p>
               <div className="flex gap-2 pt-1">
-                <button onClick={() => handleManualSave(false)} className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl py-2.5 text-sm font-medium">Alleen opslaan</button>
-                <button onClick={() => handleManualSave(true)} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-1.5">
-                  <Icon name="Plus" size={14}/> Opslaan & toevoegen
-                </button>
+                <PrimaryButton onClick={() => addAiResult(false)} className="flex-1 h-11 text-sm">Toevoegen</PrimaryButton>
+                <button onClick={() => addAiResult(true)}
+                  className="flex-1 h-11 rounded-[18px] border border-[#dfe3ea] bg-white text-[#14223c] font-semibold text-sm">+ Opslaan</button>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+      </Sheet>
+    );
+  }
 
-        {tab === 'describe' && (
-          <div className="space-y-3">
-            <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
-              <p className="text-xs text-gray-500">Beschrijf wat je hebt gegeten en AI schat de macro's.</p>
-              <textarea value={description} onChange={e => setDescription(e.target.value)}
-                placeholder="Bv. 150g kipfilet met rijst en broccoli" rows={3}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none" />
-              <button onClick={handleAiEstimate} disabled={aiLoading || !description.trim()}
-                className="w-full bg-[#2f8bff] hover:bg-[#2076e8] disabled:bg-gray-300 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
-                {aiLoading ? <Icon name="Loader2" size={14}/> : <Icon name="Sparkles" size={14}/>}{aiLoading ? 'Schatten...' : "Schat macro's"}
-              </button>
-              {aiError && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{aiError}</p>}
-              {aiResult && (
-                <div className="border border-orange-100 bg-orange-50 rounded-xl p-3 space-y-2">
-                  <p className="text-sm font-semibold text-gray-800">{aiResult.name}</p>
-                  {aiResult.portionDescription && <p className="text-xs text-gray-500">{aiResult.portionDescription}</p>}
-                  <p className="text-xs text-gray-600">{Math.round(aiResult.kcal)} kcal · {Math.round(aiResult.protein)}g eiwit · {Math.round(aiResult.fat)}g vet · {Math.round(aiResult.carbs)}g KH</p>
-                  <div className="flex gap-2 pt-1">
-                    <button onClick={() => addAiResult(false)} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2 text-xs font-medium">Toevoegen</button>
-                    <button onClick={() => addAiResult(true)} className="flex-1 border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-lg py-2 text-xs font-medium">+ Opslaan</button>
-                  </div>
+  // ─── Stap: AI-voorstel ─────────────────────────────────────────────────────
+  if (step === 'suggest') {
+    return (
+      <Sheet onClose={onClose}>
+        {terugKnop}
+        <p className="mt-3.5 mb-0 font-logo font-bold text-2xl text-[#14223c] shrink-0">AI-voorstel</p>
+        <p className="mt-1.5 mb-4 text-[13px] text-[#4a5568] shrink-0">Ingevuld met wat je vandaag nog nodig hebt. Pas gerust aan.</p>
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar space-y-3">
+          <div className="grid grid-cols-4 gap-2">
+            {[['Kcal', sugKcal, setSugKcal], ['Eiwit', sugProtein, setSugProtein], ['Vet', sugFat, setSugFat], ['KH', sugCarbs, setSugCarbs]].map(([l, v, s]) => (
+              <div key={l} className="bg-[#f7f5f0] border border-[#dfe3ea] rounded-2xl p-2.5">
+                <Eyebrow className="mb-1.5">{l}</Eyebrow>
+                <input type="number" inputMode="decimal" value={v} onChange={e => s(e.target.value)} placeholder="–"
+                  className="w-full bg-white border border-[#dfe3ea] rounded-xl px-1 py-1.5 text-center font-logo font-semibold text-[15px] text-[#14223c] focus:outline-none focus:border-[#182a48]"/>
+              </div>
+            ))}
+          </div>
+          <button onClick={handleSuggest} disabled={sugLoading}
+            className="w-full h-12 rounded-[18px] bg-[#2f8bff] text-white font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[.98] transition-transform">
+            {sugLoading ? <Icon name="Loader2" size={15}/> : <Icon name="Sparkles" size={15}/>}
+            {sugLoading ? 'Bezig…' : 'Genereer voorstel'}
+          </button>
+          {sugError && <p className="m-0 text-[13px] text-[#c2410c] bg-[#f7f5f0] rounded-xl px-4 py-3">{sugError}</p>}
+          {suggestion && (
+            <div className="bg-[#f7f5f0] border border-[#dfe3ea] rounded-[18px] p-4 space-y-2">
+              <p className="m-0 font-semibold text-[15px] text-[#14223c]">{suggestion.title}</p>
+              {Array.isArray(suggestion.ingredients) && suggestion.ingredients.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {suggestion.ingredients.map((ing, i) => (
+                    <span key={i} className="text-[11px] font-medium bg-[#eef1f6] text-[#35507d] rounded-md px-2 py-1">{ing}</span>
+                  ))}
                 </div>
               )}
+              {suggestion.description && <p className="m-0 text-xs text-[#4a5568] italic">{suggestion.description}</p>}
+              <p className="m-0 text-[13px] text-[#4a5568]">
+                {Math.round(suggestion.kcal)} kcal · {Math.round(suggestion.protein)} g eiwit · {Math.round(suggestion.fat)} g vet · {Math.round(suggestion.carbs)} g KH
+              </p>
+              <PrimaryButton onClick={addSuggestion} className="h-11 text-sm">Toevoegen aan {mealLabel.toLowerCase()}</PrimaryButton>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+      </Sheet>
+    );
+  }
 
-        {tab === 'suggest' && (
-          <div className="space-y-3">
-            <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
+  // ─── Stap: zoeken ──────────────────────────────────────────────────────────
+  return (
+    <>
+      {scanning && <BarcodeScanner onDetected={handleBarcode} onClose={() => setScanning(false)}/>}
+      <Sheet onClose={onClose}>
+        <div className="shrink-0">
+          <p className="m-0 mb-1 font-logo font-bold text-[22px] text-[#14223c]">Wat heb je gegeten?</p>
+          <button onClick={() => setShowMealPicker(v => !v)} className="flex items-center gap-1.5 text-[13px] text-[#4a5568]">
+            Gaat naar <span className="font-semibold text-[#c2410c]">{mealLabel.toLowerCase()}</span>
+            <Icon name={showMealPicker ? 'ChevronLeft' : 'ChevronRight'} size={13}/>
+          </button>
+          {showMealPicker && (
+            <div className="mt-3">
+              <MealTimeSelector active={activeMeal} onChange={k => { setActiveMeal(k); setShowMealPicker(false); }}/>
+            </div>
+          )}
+
+          <div className="flex gap-2.5 mt-4">
+            <div className="flex-1 flex items-center gap-2.5 bg-[#f7f5f0] border border-[#dfe3ea] rounded-2xl px-4 py-3.5 focus-within:border-[#182a48]">
+              <span className="text-[#4a5568] shrink-0"><Icon name="Search" size={17}/></span>
+              <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Zoek een product"
+                className="w-full bg-transparent text-[15px] text-[#14223c] placeholder:text-[#4a5568] focus:outline-none"/>
+            </div>
+            <button onClick={() => { setBarcodeMsg(''); setScanning(true); }} title="Scan barcode" aria-label="Scan barcode"
+              className="w-[52px] bg-[#eef1f6] rounded-2xl flex items-center justify-center text-[#1e3a8a] active:scale-95 transition-transform">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="9" x2="7" y2="15"/>
+                <line x1="11" y1="9" x2="11" y2="15"/><line x1="15" y1="9" x2="15" y2="15"/><line x1="19" y1="9" x2="19" y2="15"/>
+              </svg>
+            </button>
+            <button onClick={() => setStep('photo')} title="Foto van je maaltijd" aria-label="Foto van je maaltijd"
+              className="w-[52px] bg-[#eef1f6] rounded-2xl flex items-center justify-center text-[#1e3a8a] active:scale-95 transition-transform">
+              <Icon name="Camera" size={19}/>
+            </button>
+          </div>
+
+          <div className="flex gap-2 mt-2.5">
+            {[
+              { id: 'manual', label: 'Zelf ingeven', icon: 'Plus' },
+              { id: 'describe', label: 'AI-schatting', icon: 'Sparkles' },
+              { id: 'suggest', label: 'AI-voorstel', icon: 'ChefHat' },
+            ].map(t => (
+              <button key={t.id} onClick={() => setStep(t.id)}
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-full border border-[#dfe3ea] bg-white px-2 py-2 text-[12px] font-semibold text-[#35507d] active:scale-95 transition-transform">
+                <Icon name={t.icon} size={12}/> {t.label}
+              </button>
+            ))}
+          </div>
+
+          {barcodeLoading && <p className="mt-3 mb-0 text-[13px] text-[#4a5568] flex items-center gap-2"><Icon name="Loader2" size={13}/> Barcode opzoeken…</p>}
+          {barcodeMsg && <p className="mt-3 mb-0 text-[13px] text-[#35507d] bg-[#e6ecf6] rounded-xl px-4 py-3">{barcodeMsg}</p>}
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar mt-5">
+          {query.trim() ? (
+            <div className="space-y-4">
+              {results.length > 0 && (
+                <div>
+                  <Eyebrow className="mb-2.5">NEVO &amp; eigen producten</Eyebrow>
+                  <div className="flex flex-col gap-2">{results.map(productRij)}</div>
+                </div>
+              )}
               <div>
-                <p className="text-sm font-semibold text-gray-800 mb-0.5">AI Maaltijdvoorstel</p>
-                <p className="text-xs text-gray-500">Ingevuld op basis van wat je vandaag nog nodig hebt. Pas aan indien gewenst.</p>
-              </div>
-              {remaining && (
-                <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-700">
-                  Nog nodig vandaag: <strong>{Math.round(remaining.kcal)} kcal</strong> · {Math.round(remaining.protein)}g eiwit · {Math.round(remaining.fat)}g vet · {Math.round(remaining.carbs)}g KH
-                </div>
-              )}
-              <div className="grid grid-cols-4 gap-2">
-                {[['Kcal', sugKcal, setSugKcal, 'text-orange-500'], ['Eiwit', sugProtein, setSugProtein, 'text-blue-600'], ['Vet', sugFat, setSugFat, 'text-amber-600'], ['KH', sugCarbs, setSugCarbs, 'text-purple-600']].map(([l, v, s, c]) => (
-                  <div key={l} className="bg-gray-50 rounded-xl p-2.5">
-                    <label className={`block text-[10px] font-semibold ${c} mb-1`}>{l}</label>
-                    <input type="number" inputMode="decimal" value={v} onChange={e => s(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 bg-white px-1 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="-"/>
-                  </div>
-                ))}
-              </div>
-              <button onClick={handleSuggest} disabled={sugLoading}
-                className="w-full bg-[#2f8bff] hover:bg-[#2076e8] disabled:bg-gray-300 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
-                {sugLoading ? <Icon name="Loader2" size={14}/> : <Icon name="Sparkles" size={14}/>}{sugLoading ? 'Bezig...' : 'Genereer voorstel'}
-              </button>
-              {sugError && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{sugError}</p>}
-              {suggestion && (
-                <div className="border border-orange-100 bg-orange-50 rounded-xl p-3 space-y-2">
-                  <p className="text-sm font-semibold text-gray-800">{suggestion.title}</p>
-                  {Array.isArray(suggestion.ingredients) && suggestion.ingredients.length > 0 && (
-                    <ul className="text-xs text-gray-600 list-disc list-inside space-y-0.5">
-                      {suggestion.ingredients.map((ing, i) => <li key={i}>{ing}</li>)}
-                    </ul>
+                <Eyebrow className="mb-2.5 flex items-center gap-2">
+                  Merkproducten {offLoading && <Icon name="Loader2" size={11}/>}
+                </Eyebrow>
+                {offResults.length > 0
+                  ? <div className="flex flex-col gap-2">{offResults.map(productRij)}</div>
+                  : !offLoading && (
+                    <p className="m-0 text-[13px] text-[#8494aa]">
+                      {query.trim().length < 3 ? 'Typ minstens 3 tekens voor merkproducten…' : offError || 'Geen merkproducten gevonden.'}
+                    </p>
                   )}
-                  {suggestion.description && <p className="text-xs text-gray-500 italic">{suggestion.description}</p>}
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium">
-                    <span className="text-orange-600">{Math.round(suggestion.kcal)} kcal</span>
-                    <span className="text-blue-600">{Math.round(suggestion.protein)}g eiwit</span>
-                    <span className="text-amber-600">{Math.round(suggestion.fat)}g vet</span>
-                    <span className="text-purple-600">{Math.round(suggestion.carbs)}g KH</span>
-                  </div>
-                  <button onClick={addSuggestion} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2 text-xs font-medium">
-                    Toevoegen aan {MEAL_TIMES.find(m => m.key === activeMeal)?.label.toLowerCase() || 'logboek'}
-                  </button>
-                </div>
-              )}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
-    </div>
+          ) : (
+            <div>
+              <Eyebrow className="mb-2.5">Wat je vaak eet</Eyebrow>
+              {library.length > 0
+                ? <div className="flex flex-col gap-2">{library.map(productRij)}</div>
+                : <p className="m-0 text-[13px] text-[#8494aa]">Nog niets gelogd. Zoek hierboven een product, scan een barcode of maak een foto.</p>}
+            </div>
+          )}
+        </div>
+      </Sheet>
+    </>
   );
 }
 
-// ─── DailyLogList ─────────────────────────────────────────────────────────────
+// ─── Dagboek — tijdlijn per eetmoment ────────────────────────────────────────
+// Logregels dragen geen kloktijd, dus het eetmoment staat in de linkerkolom waar
+// het ontwerp een tijdstip toont. Elk moment houdt zijn eigen plus-knop.
 function DailyLogList({ log, onRemove, onOpenAdd, mealPhotos = {} }) {
   const grouped = useMemo(() => groupByMeal(log), [log]);
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-      <h2 className="text-sm font-semibold text-gray-900 mb-3">Dagboek</h2>
-      <div className="space-y-4">
-        {MEAL_TIMES.map(meal => {
-          const entries = grouped[meal.key];
-          const sub = entries.reduce((a, e) => ({ kcal: a.kcal + e.kcal, protein: a.protein + e.protein, fat: a.fat + e.fat, carbs: a.carbs + e.carbs }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
-          return (
-            <div key={meal.key}>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-semibold text-gray-700">{meal.label}</span>
-                <div className="flex items-center gap-2">
-                  {entries.length > 0 && <span className="text-xs text-gray-400">{Math.round(sub.kcal)} kcal · {Math.round(sub.protein)}g E</span>}
-                  <button onClick={() => onOpenAdd(meal.key)} className="w-6 h-6 rounded-full bg-orange-50 hover:bg-orange-100 text-orange-400 hover:text-orange-600 flex items-center justify-center transition-colors" title={`Toevoegen aan ${meal.label}`}>
-                    <Icon name="Plus" size={13}/>
-                  </button>
-                </div>
-              </div>
-              {entries.length === 0 ? <p className="text-xs text-gray-300 pl-1">Nog niets gelogd</p> :
-                <div className="space-y-1.5 pl-1">
-                  {entries.map(e => (
-                    <div key={e.id} className="py-1 border-b border-gray-50 last:border-0">
-                      <div className="flex items-center justify-between">
-                        {e.photoId && mealPhotos[e.photoId] && (
-                          <img src={mealPhotos[e.photoId]} alt="" className="w-7 h-7 rounded object-cover mr-2 shrink-0" />
-                        )}
-                        <p className="text-sm text-gray-800 flex-1 min-w-0">{e.name}{e.grams ? ` · ${e.grams}g` : ''}</p>
-                        <div className="flex items-center gap-2 ml-2">
-                          <span className="text-xs text-gray-400">{Math.round(e.kcal)} kcal</span>
-                          <button onClick={() => onRemove(e.id)} className="text-gray-300 hover:text-red-500"><Icon name="Trash2" size={15}/></button>
-                        </div>
-                      </div>
-                      {Array.isArray(e.ingredients) && e.ingredients.length > 0 && (
-                        <p className="text-[11px] text-gray-400 mt-0.5">{e.ingredients.join(' · ')}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              }
+    <div>
+      <div className="h-px bg-[#dfe3ea] mt-7"/>
+      {MEAL_TIMES.map(meal => {
+        const entries = grouped[meal.key];
+        const sub = entries.reduce((a, e) => ({ kcal: a.kcal + e.kcal, protein: a.protein + e.protein }), { kcal: 0, protein: 0 });
+        return (
+          <div key={meal.key} className="border-b border-[#dfe3ea]">
+            <div className="flex items-center gap-4 pt-4 pb-1">
+              <span className="w-[52px] shrink-0 font-mono text-[11px] font-semibold uppercase tracking-[.1em] text-[#4a5568] leading-tight">
+                {meal.short || meal.label}
+              </span>
+              <span className="flex-1 min-w-0 text-[13px] text-[#8494aa]">
+                {entries.length > 0 ? `${Math.round(sub.kcal)} kcal · ${Math.round(sub.protein)} g eiwit` : 'Nog niets gelogd'}
+              </span>
+              <button onClick={() => onOpenAdd(meal.key)} aria-label={`Toevoegen aan ${meal.label}`}
+                className="w-7 h-7 rounded-[9px] bg-[#e6ecf6] flex items-center justify-center text-[#35507d] shrink-0 active:scale-90 transition-transform">
+                <Icon name="Plus" size={14}/>
+              </button>
             </div>
-          );
-        })}
-      </div>
+            {entries.map(e => (
+              <div key={e.id} className="flex items-center gap-4 py-3">
+                <span className="w-[52px] shrink-0"/>
+                {e.photoId && mealPhotos[e.photoId] && (
+                  <img src={mealPhotos[e.photoId]} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0 -ml-2"/>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="m-0 text-[16px] text-[#14223c] truncate">{e.name}{e.grams ? ` · ${Math.round(e.grams)} g` : ''}</p>
+                  <p className="mt-0.5 mb-0 text-[13px] text-[#4a5568]">
+                    {Math.round(e.kcal)} kcal · {Math.round(e.protein)} g eiwit
+                  </p>
+                  {Array.isArray(e.ingredients) && e.ingredients.length > 0 && (
+                    <p className="mt-1 mb-0 text-[11px] text-[#8494aa] truncate">{e.ingredients.join(' · ')}</p>
+                  )}
+                </div>
+                <button onClick={() => onRemove(e.id)} aria-label={`${e.name} verwijderen`}
+                  className="w-7 h-7 rounded-[9px] bg-[#e6ecf6] flex items-center justify-center text-[#35507d] shrink-0 active:scale-90 transition-transform">
+                  <Icon name="X" size={13}/>
+                </button>
+              </div>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -507,41 +649,47 @@ function RepeatDayModal({ dateStr, count, onConfirm, onClose }) {
   function toggle(d) { setDays(s => s.includes(d) ? s.filter(x => x !== d) : [...s, d]); }
   function go() { if (!days.length) return; const w = Math.max(1, Math.min(parseInt(weeks) || 0, 26)); const n = onConfirm(w, days); setDone({ n, w }); }
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b border-gray-100">
-          <span className="text-sm font-semibold text-gray-900">🔁 Dag herhalen</span>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><Icon name="X" size={18}/></button>
-        </div>
-        <div className="p-5 space-y-4">
-          {done ? (
-            <div className="text-center py-4">
-              <Icon name="CheckCircle2" size={32} className="mx-auto text-green-500 mb-2"/>
-              <p className="text-sm text-gray-700">Gekopieerd naar <b>{done.n}</b> {done.n === 1 ? 'dag' : 'dagen'} over de komende <b>{done.w}</b> {done.w === 1 ? 'week' : 'weken'}.</p>
-              <button onClick={onClose} className="mt-4 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 px-6 text-sm font-medium">Klaar</button>
-            </div>
-          ) : count === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-4">Deze dag is leeg — er is niets om te herhalen.</p>
-          ) : (
-            <>
-              <p className="text-sm text-gray-600">Kopieer <b className="text-gray-800 capitalize">{formatDateNice(dateStr)}</b> ({count} {count === 1 ? 'item' : 'items'}) naar deze weekdagen:</p>
-              <div className="flex gap-1.5">
-                {weekdagen.map(w => { const on = days.includes(w.d); return (
+    <Sheet onClose={onClose}>
+      <p className="m-0 mb-4 font-logo font-bold text-2xl text-[#14223c] shrink-0">Dag herhalen</p>
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar space-y-4">
+        {done ? (
+          <div className="text-center py-4">
+            <Icon name="CheckCircle2" size={32} className="mx-auto text-[#2f8bff] mb-3"/>
+            <p className="m-0 text-[15px] text-[#14223c]">
+              Gekopieerd naar <b>{done.n}</b> {done.n === 1 ? 'dag' : 'dagen'} over de komende <b>{done.w}</b> {done.w === 1 ? 'week' : 'weken'}.
+            </p>
+            <div className="mt-5"><PrimaryButton onClick={onClose}>Klaar</PrimaryButton></div>
+          </div>
+        ) : count === 0 ? (
+          <p className="m-0 text-[15px] text-[#8494aa] text-center py-6">Deze dag is leeg — er is niets om te herhalen.</p>
+        ) : (
+          <>
+            <p className="m-0 text-[15px] text-[#4a5568]">
+              Kopieer <b className="text-[#14223c] capitalize">{formatDateNice(dateStr)}</b> ({count} {count === 1 ? 'item' : 'items'}) naar deze weekdagen:
+            </p>
+            <div className="flex gap-1.5">
+              {weekdagen.map(w => {
+                const on = days.includes(w.d);
+                return (
                   <button key={w.d} onClick={() => toggle(w.d)}
-                    className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-colors ${on ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}>{w.label}</button>
-                ); })}
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="text-sm text-gray-600">de komende</label>
-                <input type="number" min="1" max="26" value={weeks} onChange={e => setWeeks(e.target.value)} className="w-16 border border-gray-200 rounded-lg px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-orange-400"/>
-                <label className="text-sm text-gray-600">weken</label>
-              </div>
-              <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg px-3 py-2">Let op: bestaande voeding op de gekozen weekdagen wordt overschreven.</p>
-              <button onClick={go} disabled={!days.length} className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white rounded-xl py-2.5 text-sm font-medium">Herhalen</button>
-            </>
-          )}
-        </div>
+                    className={`flex-1 py-2.5 rounded-[14px] text-[13px] font-semibold border transition-colors
+                      ${on ? 'bg-[#182a48] text-white border-[#182a48]' : 'bg-white text-[#14223c] border-[#dfe3ea]'}`}>{w.label}</button>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[15px] text-[#4a5568]">de komende</span>
+              <input type="number" min="1" max="26" value={weeks} onChange={e => setWeeks(e.target.value)}
+                className="w-16 border border-[#dfe3ea] rounded-xl px-3 py-2 text-center font-logo font-semibold text-[#14223c] focus:outline-none focus:border-[#182a48]"/>
+              <span className="text-[15px] text-[#4a5568]">weken</span>
+            </div>
+            <p className="m-0 text-[13px] text-[#c2410c] bg-[#f7f5f0] border border-[#dfe3ea] rounded-xl px-4 py-3">
+              Let op: bestaande voeding op de gekozen weekdagen wordt overschreven.
+            </p>
+            <PrimaryButton onClick={go} disabled={!days.length}>Herhalen</PrimaryButton>
+          </>
+        )}
       </div>
-    </div>
+    </Sheet>
   );
 }

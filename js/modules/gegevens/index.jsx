@@ -36,26 +36,26 @@ function StorageWarningBanner({ userName, userSlug }) {
   }
 
   return (
-    <div className="rounded-2xl border border-orange-300 bg-orange-50 p-4">
+    <div className="rounded-[22px] bg-[#182a48] px-[22px] py-5">
       <div className="flex items-start gap-3">
-        <span className="text-orange-500 shrink-0 mt-0.5"><Icon name="AlertTriangle" size={18}/></span>
+        <span className="text-[#f97316] shrink-0 mt-0.5"><Icon name="AlertTriangle" size={18}/></span>
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-orange-900">
+          <p className="m-0 font-logo font-bold text-[20px] leading-tight text-white">
             Opslag vol — je laatste wijziging is niet bewaard
-          </h3>
-          <p className="text-xs text-orange-800 mt-1">
+          </p>
+          <p className="mt-2 mb-0 text-[13px] leading-relaxed text-white/75" style={{ textWrap: 'pretty' }}>
             Dit toestel heeft geen ruimte meer voor Qvolve. Exporteer nu je gegevens als
             back-up en maak daarna ruimte vrij (de foto's bij je maaltijden nemen daarvan
             verreweg het meeste in), anders gaat verloren wat je hierna logt.
           </p>
-          {exportFout && <p className="text-xs text-red-700 font-medium mt-2">{exportFout}</p>}
-          <div className="flex gap-2 mt-3">
+          {exportFout && <p className="mt-2 mb-0 text-[13px] font-semibold text-[#f97316]">{exportFout}</p>}
+          <div className="flex gap-2 mt-4">
             <button onClick={handleExport}
-              className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg px-3 py-1.5 text-xs font-medium">
-              <Icon name="Download" size={13}/> Exporteer nu
+              className="flex items-center gap-2 bg-white text-[#14223c] rounded-[14px] px-4 py-2.5 text-[13px] font-semibold active:scale-95 transition-transform">
+              <Icon name="Download" size={14}/> Exporteer nu
             </button>
             <button onClick={() => setFout(null)}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium text-orange-800 border border-orange-300">
+              className="rounded-[14px] px-4 py-2.5 text-[13px] font-semibold text-white/70 border border-white/25 active:scale-95 transition-transform">
               Sluiten
             </button>
           </div>
@@ -65,6 +65,7 @@ function StorageWarningBanner({ userName, userSlug }) {
   );
 }
 
+// Exportkaart — staat op het profieltabblad, onder de instellingen.
 function DataExportCard({ userName, userSlug }) {
   const [msg, setMsg] = useState(null);      // { ok: boolean, text: string }
   const [usage, setUsage] = useState(() => storageUsageBytes());
@@ -82,22 +83,22 @@ function DataExportCard({ userName, userSlug }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-      <h2 className="text-sm font-semibold text-gray-900 mb-1">Je gegevens</h2>
-      <p className="text-xs text-gray-500 mb-3">
+    <div className="bg-white border border-[#dfe3ea] rounded-[18px] px-[18px] py-4">
+      <Eyebrow>Je gegevens</Eyebrow>
+      <p className="mt-2 mb-3 text-[13px] leading-relaxed text-[#4a5568]" style={{ textWrap: 'pretty' }}>
         Alles staat enkel op dit toestel. Maak geregeld een back-up: bij het wissen van
         je browsergegevens is de rest weg.
       </p>
       <button onClick={handleExport}
-        className="w-full flex items-center justify-center gap-2 bg-[#2f8bff] hover:bg-[#1f77e8] active:scale-[0.99] text-white rounded-xl py-2.5 text-sm font-medium transition-transform">
+        className="w-full h-12 rounded-[18px] bg-[#2f8bff] text-white font-semibold text-sm flex items-center justify-center gap-2 active:scale-[.98] transition-transform">
         <Icon name="Download" size={16}/> Exporteer alles als bestand
       </button>
       {msg && (
-        <p className={`text-xs mt-2 ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>
-          {msg.ok ? '✓ ' : ''}{msg.text}
+        <p className="mt-2 mb-0 text-[13px] font-medium" style={{ color: msg.ok ? QV.blueDeep : QV.orangeInk }}>
+          {msg.text}
         </p>
       )}
-      <p className="text-[10px] text-gray-400 pt-2">
+      <p className="mt-2 mb-0 text-[11px] text-[#8494aa]">
         Gebruikte opslag op dit toestel: {formatBytes(usage)}
       </p>
     </div>

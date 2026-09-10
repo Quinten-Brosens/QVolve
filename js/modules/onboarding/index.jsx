@@ -1,5 +1,5 @@
 // ─── modules/onboarding — profiel setup wizard ───────────────────────────────
-function SetupWizard({ onComplete, initial }) {
+function SetupWizard({ onComplete, onCancel, initial }) {
   const [form, setForm] = useState(() => initial ? {
     weight: String(initial.weight), height: String(initial.height), age: String(initial.age),
     gender: initial.gender, activity: initial.activity, goal: initial.goal,
@@ -14,41 +14,74 @@ function SetupWizard({ onComplete, initial }) {
     onComplete({ weight: w, height: h, age: a, gender: form.gender, activity: form.activity, goal: form.goal, sporterType: form.sporterType, macroProfile: form.macroProfile });
   }
 
+  const veldKlasse = 'w-full bg-[#f7f5f0] border border-[#dfe3ea] rounded-2xl px-4 py-3 text-[15px] text-[#14223c] focus:outline-none focus:border-[#182a48]';
+
+  const Veld = ({ label, children }) => (
+    <div>
+      <Eyebrow className="mb-1.5">{label}</Eyebrow>
+      {children}
+    </div>
+  );
+
   return (
-    <div className="max-w-md mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-      <h2 className="text-lg font-semibold text-gray-900 mb-1">Vertel ons over jezelf</h2>
-      <p className="text-sm text-gray-500 mb-5">We berekenen je dagelijkse macro's.</p>
+    <div className="bg-white border border-[#dfe3ea] rounded-[22px] p-5">
+      <p className="m-0 mb-5 text-[13px] leading-relaxed text-[#4a5568]" style={{ textWrap: 'pretty' }}>
+        Hiermee rekenen we je dagelijkse calorie- en macrodoel uit. Je kunt alles later bijstellen.
+      </p>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <div><label className="block text-xs font-medium text-gray-600 mb-1">Gewicht (kg)</label>
-            <input type="number" inputMode="decimal" value={form.weight} onChange={e => update('weight', e.target.value)} placeholder="80"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" /></div>
-          <div><label className="block text-xs font-medium text-gray-600 mb-1">Lengte (cm)</label>
-            <input type="number" inputMode="decimal" value={form.height} onChange={e => update('height', e.target.value)} placeholder="180"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" /></div>
+          <Veld label="Gewicht (kg)">
+            <input type="number" inputMode="decimal" value={form.weight} placeholder="80"
+              onChange={e => update('weight', e.target.value)} className={veldKlasse}/>
+          </Veld>
+          <Veld label="Lengte (cm)">
+            <input type="number" inputMode="decimal" value={form.height} placeholder="180"
+              onChange={e => update('height', e.target.value)} className={veldKlasse}/>
+          </Veld>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div><label className="block text-xs font-medium text-gray-600 mb-1">Leeftijd</label>
-            <input type="number" inputMode="numeric" value={form.age} onChange={e => update('age', e.target.value)} placeholder="30"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" /></div>
-          <div><label className="block text-xs font-medium text-gray-600 mb-1">Geslacht</label>
-            <select value={form.gender} onChange={e => update('gender', e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
-              <option value="man">Man</option><option value="vrouw">Vrouw</option></select></div>
+          <Veld label="Leeftijd">
+            <input type="number" inputMode="numeric" value={form.age} placeholder="30"
+              onChange={e => update('age', e.target.value)} className={veldKlasse}/>
+          </Veld>
+          <Veld label="Geslacht">
+            <select value={form.gender} onChange={e => update('gender', e.target.value)} className={veldKlasse}>
+              <option value="man">Man</option><option value="vrouw">Vrouw</option>
+            </select>
+          </Veld>
         </div>
-        <div><label className="block text-xs font-medium text-gray-600 mb-1">Activiteitsniveau</label>
-          <select value={form.activity} onChange={e => update('activity', e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
-            {Object.entries(ACTIVITY_FACTORS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
-        <div><label className="block text-xs font-medium text-gray-600 mb-1">Doel</label>
-          <select value={form.goal} onChange={e => update('goal', e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
-            {Object.entries(GOALS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
-        <div><label className="block text-xs font-medium text-gray-600 mb-1">Macroprofiel</label>
-          <select value={form.macroProfile} onChange={e => update('macroProfile', e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
-            {Object.entries(MACRO_PROFILES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
-        {form.macroProfile === 'normal' && <div><label className="block text-xs font-medium text-gray-600 mb-1">Type sporter</label>
-          <select value={form.sporterType} onChange={e => update('sporterType', e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
-            {Object.entries(SPORTER_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>}
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <button onClick={handleSubmit} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-medium transition-colors">Bereken mijn macro's</button>
+        <Veld label="Activiteitsniveau">
+          <select value={form.activity} onChange={e => update('activity', e.target.value)} className={veldKlasse}>
+            {Object.entries(ACTIVITY_FACTORS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        </Veld>
+        <Veld label="Doel">
+          <select value={form.goal} onChange={e => update('goal', e.target.value)} className={veldKlasse}>
+            {Object.entries(GOALS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        </Veld>
+        <Veld label="Macroprofiel">
+          <select value={form.macroProfile} onChange={e => update('macroProfile', e.target.value)} className={veldKlasse}>
+            {Object.entries(MACRO_PROFILES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        </Veld>
+        {form.macroProfile === 'normal' && (
+          <Veld label="Type sporter">
+            <select value={form.sporterType} onChange={e => update('sporterType', e.target.value)} className={veldKlasse}>
+              {Object.entries(SPORTER_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </Veld>
+        )}
+        {error && <p className="m-0 text-[13px] text-[#c2410c] bg-[#f7f5f0] rounded-xl px-4 py-3">{error}</p>}
+        <div className="flex gap-2 pt-1">
+          {onCancel && (
+            <button onClick={onCancel}
+              className="flex-1 h-14 rounded-[20px] border border-[#dfe3ea] bg-white text-[#14223c] font-semibold text-base active:scale-[.98] transition-transform">
+              Annuleren
+            </button>
+          )}
+          <PrimaryButton onClick={handleSubmit} className="flex-1">Bereken mijn macro's</PrimaryButton>
+        </div>
       </div>
     </div>
   );

@@ -40,6 +40,8 @@ js/
                         storageUsageBytes, formatBytes
     utils.jsx         — datum-helpers, normalizeMealTime, groupByMeal, loadScript,
                         humanizeCamError, React destructuring
+    theme.jsx         — QV kleurtokens + gedeelde vormgeving: Eyebrow, Sheet,
+                        PrimaryButton, SettingRow
     backup.jsx        — keyBelongsToUser, collectUserData, buildExport,
                         buildExportFilename, downloadJson, exportUserData
     image.jsx         — prepareMealPhoto (foto → 1024px JPEG + 160px thumbnail)
@@ -57,18 +59,22 @@ js/
     onboarding/
       index.jsx       — SetupWizard (profiel invullen, macro's berekenen)
     dashboard/
-      index.jsx       — CalorieSummary, MacroRing, MacroBreakdownModal,
-                        DateNav, KcalAdjuster, MealTimeSelector
+      index.jsx       — DateNav, KcalHero, SlotBar, MacroDonut,
+                        MacroBreakdownModal, KcalAdjuster, MealTimeSelector
+    coach/
+      index.jsx       — nextMoment, planSuggestion, historySuggestions,
+                        coachSuggestions, coachLine, CoachCard,
+                        loadCoachSkips/saveCoachSkips
     fotomodus/
       index.jsx       — PhotoTab (maaltijd loggen vanaf een foto)
     voeding/
-      index.jsx       — BarcodeScanner, AddFoodOverlay (5 tabs: zoeken/foto/
-                        manueel/AI-schatting/AI-voorstel), DailyLogList,
-                        RepeatDayModal
+      index.jsx       — BarcodeScanner, frequentFoods, AddFoodOverlay
+                        (stappen: zoeken/afwegen/foto/zelf/AI-schatting/
+                        AI-voorstel), DailyLogList, RepeatDayModal
     boodschappenlijst/
       index.jsx       — SHOP_CATEGORIES, SHOP_KEYWORDS, SYNONYMS, stemNL,
                         categorizeIngredient, parseIngredient, labelFor,
-                        buildShoppingList, ShoppingListModal
+                        buildShoppingList, ShoppingListPanel
     weekschema/
       index.jsx       — VRAGENLIJST, buildSchemaPrompt, VragenlijstStap,
                         printWeekSchema, ImportSchemaModal, WeekSchemaPanel
@@ -76,49 +82,83 @@ js/
       index.jsx       — TrainingPlaceholder (nog uit te bouwen)
     gegevens/
       index.jsx       — StorageWarningBanner, DataExportCard
-  app.jsx             — App root: state, routing tussen tabs, FAB-knop
+    profiel/
+      index.jsx       — ProfilePanel, MacroSettingsSheet, CustomFoodsSheet
+  app.jsx             — App root: state, routing tussen de vier tabs, FAB,
+                        toast met ongedaan maken
 ```
 
 ### Laadvolgorde in qvolve.html (volgorde is cruciaal)
 1. `data/nevo-data.js` (plain JS, geen Babel)
 2. `js/lib/storage.jsx`
 3. `js/lib/utils.jsx`
-4. `js/lib/backup.jsx`
-5. `js/lib/image.jsx`
-6. `js/lib/macros.jsx`
-7. `js/lib/ai.jsx`
-8. `js/lib/off.jsx`
-9. `js/lib/icons.jsx`
-10. `js/modules/auth/index.jsx`
-11. `js/modules/onboarding/index.jsx`
-12. `js/modules/dashboard/index.jsx`
-13. `js/modules/fotomodus/index.jsx` (vóór voeding: `AddFoodOverlay` rendert `PhotoTab`)
-14. `js/modules/voeding/index.jsx`
-15. `js/modules/boodschappenlijst/index.jsx`
-16. `js/modules/weekschema/index.jsx`
-17. `js/modules/training/index.jsx`
-18. `js/modules/gegevens/index.jsx`
-19. `js/app.jsx`
+4. `js/lib/theme.jsx` (ná utils: `Sheet` gebruikt de React-destructuring daar)
+5. `js/lib/backup.jsx`
+6. `js/lib/image.jsx`
+7. `js/lib/macros.jsx`
+8. `js/lib/ai.jsx`
+9. `js/lib/off.jsx`
+10. `js/lib/icons.jsx`
+11. `js/modules/auth/index.jsx`
+12. `js/modules/onboarding/index.jsx`
+13. `js/modules/dashboard/index.jsx`
+14. `js/modules/coach/index.jsx`
+15. `js/modules/fotomodus/index.jsx` (vóór voeding: `AddFoodOverlay` rendert `PhotoTab`)
+16. `js/modules/voeding/index.jsx`
+17. `js/modules/boodschappenlijst/index.jsx`
+18. `js/modules/weekschema/index.jsx`
+19. `js/modules/training/index.jsx`
+20. `js/modules/gegevens/index.jsx`
+21. `js/modules/profiel/index.jsx` (ná training en gegevens: gebruikt
+    `TrainingPlaceholder` en `DataExportCard`)
+22. `js/app.jsx`
 
 ## Kleurenschema
 
-Gebaseerd op het logo (`logo-qvolve.png`): donker navy met blauwe gloed, helder
-blauw + oranje accenten.
+De app-schil is **licht**: een warm gebroken wit als paginakleur, met donker navy
+als *kaartkleur* — niet meer als header- en navigatiebalk. Het loginscherm en het
+admin-paneel blijven wel volledig donker navy.
 
-- Donker navy (`#182a48` voor surfaces, `#14223c` diepste achtergrond, met radiale
-  gloed `radial-gradient(ellipse at top, #26395f, #14223c)`): header, bottom-nav,
-  loginscherm, admin-paneel. (Vroeger `blue-900/950` — niet meer gebruiken.)
-- Helder blauw (`#2f8bff`): de **"Q"** in de wordmark, AI- en scan-knoppen, accenten.
-- Oranje (`orange-500` / `#f97316`): primaire CTA's, actieve states, de **"volve"**
-  in de wordmark.
-- Randen op donker: `#2b3e60`; lichtere surfaces (inputs): `#24375a`.
-- Lichtgrijs (`gray-50`): content-achtergrond (ongewijzigd, blijft licht).
-- **Lettertype:** Rajdhani (Google Fonts) via de klasse `.font-logo` — gebruikt
-  voor de wordmark in de header en de labels in de bottom-nav (hoofdletters).
-  Rajdhani gaat tot gewicht 700 (geen 800/900).
-- Logo: `logo-qvolve.png` (Q-merkteken met oranje pijl). Op het loginscherm wordt
-  het beeld zelf getoond; in de header de tekst-wordmark (Q blauw, volve oranje).
+De hexcodes staan één keer in `js/lib/theme.jsx` als `QV`. Gebruik die waar JS de
+kleur nodig heeft (SVG-stroke, inline style); elders dezelfde waarde als Tailwind
+arbitrary value, bv. `bg-[#182a48]`.
+
+| Rol | Waarde | Gebruik |
+|---|---|---|
+| Paginakleur | `#f7f5f0` | achtergrond van elk tabblad |
+| Een tint dieper | `#e8e6e1` | `<body>`, buiten de max-width |
+| Donker navy | `#182a48` | coachkaart, doelkaart, primaire knop, FAB, toast, loginscherm |
+| Diepste navy | `#14223c` | primaire tekst, sheet-waas (`/40`) |
+| Secundaire tekst | `#4a5568` | bijschriften |
+| Inactief | `#8494aa` | nav-items uit, tertiaire tekst |
+| Randen | `#dfe3ea` | kaarten, invoervelden, scheidingslijnen |
+| Zacht vlak | `#eef1f6` | chips, donut-spoor |
+| Blauwige chip | `#e6ecf6` | avatar, plus/kruis-knopjes |
+| Helder blauw | `#2f8bff` | eiwit, afgevinkt, AI-knoppen, de **"Q"** in de wordmark |
+| Blauw op licht | `#35507d` / `#1e3a8a` | icoon in een chip / nadruk, cijfers |
+| Oranje | `#f97316` | accent **op donker** (coach-eyebrow, toast), de **"volve"** |
+| Oranje op licht | `#c2410c` | accent op de lichte schil — donker genoeg voor contrast |
+| Vet / koolhydraten | `#f59e0b` / `#6f8fd0` | macro-donuts en taartdiagram |
+
+Let op: gebruik **niet** `#f97316` voor tekst op de lichte achtergrond — daar is
+`#c2410c` de juiste tint. `gray-50` en `blue-900/950` zijn niet meer in gebruik.
+
+- **Lettertype:** Rajdhani (Google Fonts) via `.font-logo` — voor cijfers, koppen
+  en de nav-labels. Rajdhani gaat tot gewicht 700 (geen 800/900). Lopende tekst
+  is `system-ui`. De kleine hoofdletterkopjes staan in `font-mono` en lopen via
+  de `Eyebrow`-component.
+- Logo: `logo-qvolve.png` (Q-merkteken met oranje pijl), enkel nog op het
+  loginscherm; de app-schil heeft geen header meer.
 - PWA-iconen (`icon-192.png` / `icon-512.png`) zijn uit dit logo gegenereerd.
+- `theme-color` in `qvolve.html` staat op `#f7f5f0` (lichte statusbalk).
+
+### Vormtaal
+
+- Kaarten `rounded-[18px]`, donkere blokken `rounded-[22px]`/`rounded-[26px]`,
+  sheets `rounded-t-[32px]`, knoppen `rounded-[20px]` op 56 px hoog.
+- Aanraking geeft `active:scale-[.98]` (of `.95` op kleine knoppen), geen hover.
+- Bewegingen staan als keyframes in `qvolve.html`: `qv-fade`, `qv-sheet`,
+  `qv-card`, `qv-toast`. Ze zijn uitgeschakeld bij `prefers-reduced-motion`.
 
 ## AI-functies (Google Gemini)
 
@@ -164,6 +204,8 @@ blauw + oranje accenten.
 - `shop-state:{slug}:{start}:{end}` — boodschappenlijst staat (afgevinkt, extra's)
 - `meal-photos:{slug}:{datum}` — miniaturen uit de fotomodus, `{ photoId: dataUrl }`
   (één foto per `photoId`, ook als er meerdere items uit herkend zijn)
+- `coach-skips:{slug}:{datum}` — eetmomenten die je die dag oversloeg, als array
+  van `MEAL_TIMES`-keys; de coachkaart springt eroverheen
 
 (`slug` = naam via `slugifyName()`, bv. "quinten-brosens".)
 
@@ -173,23 +215,63 @@ een nieuwe sleutel die dat patroon volgt, gaat automatisch mee in de back-up.
 `qvolve-users-v2` en `qvolve-session` volgen het patroon bewust niet en blijven
 buiten de export.
 
+## Navigatie
+
+Vier tabbladen in een lichte bottom-nav (`APP_TABS` in `js/app.jsx`):
+
+| Tab | Inhoud |
+|---|---|
+| **Vandaag** | datumnavigatie + avatar, groot restcijfer, eetmomentenbalk, coachkaart, tijdlijn |
+| **Week** | `WeekSchemaPanel` — vragenlijst of het gegenereerde 7-daags schema |
+| **Lijst** | `ShoppingListPanel` — boodschappen uit wat je écht logde |
+| **Profiel** | `ProfilePanel` — doel, instellingen, eigen producten, training, export, uitloggen |
+
+De FAB (rechtsonder, boven de nav) staat alleen op Vandaag en opent het
+toevoeg-sheet op het eerstvolgende open eetmoment. Elke log-actie geeft een
+toast met **Ongedaan** (`z-[60]`, dus boven de sheets op `z-50`); die zet de
+volledige vorige dagstand terug, foto's inbegrepen.
+
 ## Functionaliteit per module
 
 ### dashboard (`js/modules/dashboard/index.jsx`)
-CalorieSummary (balk + tekst), MacroRing (SVG-donut, toont `gegeten/doel g`),
-MacroBreakdownModal (taartdiagram + top-5 per macro), DateNav, KcalAdjuster,
+DateNav (pijlen + korte datum, tik op de datum = terug naar vandaag), KcalHero
+(het grote restcijfer, tikbaar), SlotBar (zes segmenten: blauw gelogd, oranje
+het huidige moment, grijs open), MacroDonut, MacroBreakdownModal (bottom sheet:
+drie donuts + taartdiagram met doelverhouding + top-5 per macro), KcalAdjuster,
 MealTimeSelector.
 
+### coach (`js/modules/coach/index.jsx`)
+De donkere kaart bovenaan Vandaag. `nextMoment()` zoekt het eerste eetmoment uit
+`MEAL_TIMES` dat niet gelogd én niet overgeslagen is; `coachSuggestions()` geeft
+er maximaal twee voorstellen bij, **zonder AI-oproep**:
+
+1. `planSuggestion()` — de maaltijd uit `weekschema-plan:{slug}` voor die
+   weekdag en dat eetmoment;
+2. `historySuggestions()` — wat je op dat eetmoment het vaakst logde over de
+   afgelopen 45 dagen (`COACH_HISTORY_DAYS`).
+
+Daarom is de kaart altijd meteen klaar en werkt ze offline. Overslaan bewaart de
+key in `coach-skips:{slug}:{datum}`.
+
 ### voeding (`js/modules/voeding/index.jsx`)
-- **AddFoodOverlay**: fullscreen overlay met 5 tabs:
-  - *Zoeken* — NEVO + eigen producten (instant) + Open Food Facts (debounced)
-    + barcodescan (`html5-qrcode`, lazy van CDN)
+- **AddFoodOverlay**: één bottom sheet met stappen, geen tabbalk meer.
+  - *Zoeken* (start) — zoekveld + barcode- en fotoknop; daaronder pillen naar
+    Zelf ingeven, AI-schatting en AI-voorstel. Leeg zoekveld toont
+    **"Wat je vaak eet"** (`frequentFoods`: namen uit je recente logboek
+    opgezocht in de zoekpool, plus je eigen producten). Getypt: NEVO + eigen
+    producten (instant) en Open Food Facts (debounced).
+  - *Afwegen* — het gram-scherm: −/+ per 10 g, tikbaar cijfer, portiechips en
+    een navy strook met de doorgerekende macro's. Bevestigen logt en keert terug
+    naar Zoeken, zodat een maaltijd met meerdere ingrediënten in één keer gaat.
+    Producten met een vaste portie slaan deze stap over.
   - *Foto* — `PhotoTab` uit de fotomodus-module (zie hieronder)
   - *Zelf* — handmatige invoer per 100g, opslaan in eigen lijst
   - *AI-schatting* — vrije tekstbeschrijving → Gemini schat macro's
-  - *AI Voorstel* — doel-macro's (standaard = resterend voor die dag) →
+  - *AI-voorstel* — doel-macro's (standaard = resterend voor die dag) →
     Gemini stelt een maaltijd voor
-- **DailyLogList**: dagboek gegroepeerd per eetmoment, + knop per maaltijd
+- **DailyLogList**: tijdlijn per eetmoment. Logregels hebben geen kloktijd, dus
+  in de linkerkolom staat `MEAL_TIMES[].short` waar het ontwerp een tijdstip
+  toont. Elk moment houdt zijn eigen plus-knop.
 - **RepeatDayModal**: huidige dag kopiëren naar weekdagen voor X weken
 - **BarcodeScanner**: camera-overlay via html5-qrcode
 
@@ -207,17 +289,31 @@ Aggregeert gelogde voeding over datumbereik. Groepeert per supermarkt-categorie
 (NEVO-groep → NEVO_TO_SHOP, losse ingrediënten → SHOP_KEYWORDS + stemNL).
 Functies: normalizeIngredientName, shouldDropIngredient, categorizeIngredient,
 parseIngredient (qty+unit+name), labelFor (kg/l boven 1000).
-ShoppingListModal: afvinken, hoeveelheid aanpassen, handmatig toevoegen,
-extra persoon (factor 0.33–1.0), kopiëren, WhatsApp delen.
+ShoppingListPanel (het **Lijst**-tabblad, geen modal meer): afvinken, hoeveelheid
+aanpassen, handmatig toevoegen, kopiëren, WhatsApp delen. Periode en extra
+persoon (factor 0.33–1.0) zitten achter de uitklapper "Periode en personen",
+zodat de lijst zelf de bladzijde vult.
 
 ### weekschema (`js/modules/weekschema/index.jsx`)
 10-staps VRAGENLIJST (budget, variatie, ontbijt, lunch, kooktijd, eetstijl,
 dieet, niet_lust, snacks, extra) → buildSchemaPrompt → Gemini genereert 7-daags
-schema (JSON). ImportSchemaModal: startdatum snapt naar maandag, weekdag-uitlijning,
-X weken herhalen. printWeekSchema: pop-up printvenster.
+schema (JSON). Het **Week**-tabblad toont daarna de zeven dagpillen met de
+maaltijdkaarten en het dagtotaal. De dagnummers zijn die van de *lopende* week
+(`mondayOf(vandaag)`): zo landt het schema precies zoals je het ziet wanneer je
+het importeert. ImportSchemaModal: startdatum snapt naar maandag,
+weekdag-uitlijning, X weken herhalen. printWeekSchema: pop-up printvenster.
+De AI-boodschappenlijst uit het schema zit achter de knop "AI-lijst" — die is
+iets anders dan het Lijst-tabblad, dat op je échte logboek werkt.
 
 ### training (`js/modules/training/index.jsx`)
-Placeholder — nog uit te bouwen.
+Placeholder — nog uit te bouwen. Bereikbaar via een rij op het profieltabblad;
+de bottom-nav houdt de vier tabs uit het ontwerp.
+
+### profiel (`js/modules/profiel/index.jsx`)
+ProfilePanel: avatar met initialen, navy doelkaart (doel, kcal, eiwit, tekort in
+%), en de instellingsrijen. MacroSettingsSheet stelt het caloriedoel bij
+(KcalAdjuster) en laat het profiel opnieuw invullen; CustomFoodsSheet toont en
+verwijdert je eigen producten. Daaronder de DataExportCard.
 
 ### auth (`js/modules/auth/index.jsx`)
 Login (naam + wachtwoord), sessiebeheer (3 dagen sliding window), wachtwoord
@@ -230,11 +326,14 @@ SetupWizard: gewicht/lengte/leeftijd/geslacht/activiteit/doel/macroprofiel
 ## Bekende beperkingen
 
 - Omdat alles in `localStorage` zit, is data niet gedeeld tussen apparaten of
-  gebruikers. Elk toestel staat op zichzelf. Een exportknop onderaan de
-  voeding-tab geeft alles als JSON-bestand mee; loopt het browserquotum vol,
-  dan verschijnt bovenaan een waarschuwing in plaats van een stille blokkade.
+  gebruikers. Elk toestel staat op zichzelf. De exportknop op het profieltabblad
+  geeft alles als JSON-bestand mee; loopt het browserquotum vol, dan verschijnt
+  bovenaan een waarschuwing in plaats van een stille blokkade.
 - Service worker kan oude versies cachen; daarom network-first voor HTML/JS.
-  Bump `CACHE` in `sw.js` bij grote wijzigingen (nu `qvolve-v8`).
+  Bump `CACHE` in `sw.js` bij grote wijzigingen (nu `qvolve-v9`).
+- De coachvoorstellen komen uit het weekschema en je loggeschiedenis. Een nieuwe
+  gebruiker zonder schema krijgt daarom alleen de zoekknop te zien — dat is
+  bedoeld, niet stuk.
 - Een centrale database (bv. Firebase) zou nodig zijn voor gedeelde gebruikers
   of synchronisatie — bewust nog niet gedaan om het simpel en gratis te houden.
 

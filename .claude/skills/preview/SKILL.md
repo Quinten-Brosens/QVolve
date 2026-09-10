@@ -70,10 +70,12 @@ alleen zo zie je de echte layout. Test daarna het onderdeel dat je gewijzigd heb
 
 | Wijziging in            | Kijk na                                                        |
 |-------------------------|----------------------------------------------------------------|
-| `voeding`               | Alle vier tabs van AddFoodOverlay openen, zoeken in NEVO       |
-| `dashboard`             | MacroRing toont `gegeten/doel g`, MacroBreakdownModal opent     |
-| `boodschappenlijst`     | Lijst met categorieën, afvinken, hoeveelheid aanpassen          |
-| `weekschema`            | Vragenlijst doorlopen; printvenster opent                       |
+| `voeding`               | Zoek-sheet openen, product kiezen, gram-scherm, toevoegen + toast |
+| `dashboard`             | Tik het grote restcijfer → macro-sheet met drie donuts        |
+| `coach`                 | Kaart toont het juiste eetmoment; overslaan schuift door        |
+| `boodschappenlijst`     | Lijst-tab: categorieën, afvinken, hoeveelheid aanpassen        |
+| `weekschema`            | Vragenlijst doorlopen; dagpillen; printvenster opent            |
+| `profiel`               | Doelkaart, instellingsrijen, sheets openen, uitloggen           |
 | `auth` / `onboarding`   | Login, wachtwoordwijziging, wizard — met lege localStorage      |
 
 ## Wat hier niet werkt
