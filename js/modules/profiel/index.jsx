@@ -2,10 +2,6 @@
 // Het vierde tabblad uit het ontwerp: wie je bent, wat je doel is, en de
 // instellingen die vroeger verspreid over de voeding-tab stonden.
 
-function initialen(naam) {
-  return String(naam || '').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('') || '?';
-}
-
 // Doel en macro's bijstellen — het caloriedoel handmatig verschuiven of het
 // hele profiel opnieuw invullen.
 function MacroSettingsSheet({ macros, profile, onAdjust, onReset, onEditProfile, onClose }) {

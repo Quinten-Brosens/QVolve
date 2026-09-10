@@ -57,7 +57,7 @@ test drie extra stappen kost. Sla dat over door de sessie te zetten
 localStorage.setItem('qvolve-users-v2', JSON.stringify(
   [{ name: 'Quinten Brosens', password: 'Testpw123!', mustChangePw: false }]));
 localStorage.setItem('qvolve-session', JSON.stringify(
-  { name: 'Quinten Brosens', ts: Date.now() }));
+  { name: 'Quinten Brosens', ts: Date.now(), remember: true }));
 ```
 
 Bestaat er nog geen profiel, dan komt de `SetupWizard` — vul die één keer door,
@@ -77,6 +77,7 @@ alleen zo zie je de echte layout. Test daarna het onderdeel dat je gewijzigd heb
 | `weekschema`            | Vragenlijst doorlopen; dagpillen; printvenster opent            |
 | `profiel`               | Doelkaart, instellingsrijen, sheets openen, uitloggen           |
 | `auth` / `onboarding`   | Login, wachtwoordwijziging, wizard — met lege localStorage      |
+| biometrie in `auth`     | Zet een virtuele authenticator op (zie hieronder), anders zie je alleen het wachtwoordscherm |
 
 ## Wat hier niet werkt
 
@@ -84,3 +85,20 @@ alleen zo zie je de echte layout. Test daarna het onderdeel dat je gewijzigd heb
 server: de dev-server geeft er 501 op. Alles met AI (weekschema, AI-schatting,
 AI-voorstel) en OFF-tekstzoeken test je met `vercel dev`. **Barcode scannen
 werkt hier wel** — dat gaat rechtstreeks naar de OFF v2-API met CORS.
+
+## 7. Biometrie testen zonder toestel
+
+WebAuthn heeft een echte gezichts- of vingerafdruksensor nodig. In Chromium zet
+je er een na via CDP, waarna in- en uitschrijven gewoon werken:
+
+```js
+const client = await page.context().newCDPSession(page);
+await client.send('WebAuthn.enable');
+await client.send('WebAuthn.addVirtualAuthenticator', { options: {
+  protocol: 'ctap2', transport: 'internal', hasResidentKey: true,
+  hasUserVerification: true, isUserVerified: true,
+  automaticPresenceSimulation: true } });
+```
+
+Zonder die stap meldt `bioMogelijk()` netjes `false` en toont het loginscherm
+enkel naam + wachtwoord — dat is ook wat een oude laptop te zien krijgt.

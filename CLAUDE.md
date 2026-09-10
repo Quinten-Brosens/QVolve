@@ -41,7 +41,7 @@ js/
     utils.jsx         — datum-helpers, normalizeMealTime, groupByMeal, loadScript,
                         humanizeCamError, React destructuring
     theme.jsx         — QV kleurtokens + gedeelde vormgeving: Eyebrow, Sheet,
-                        PrimaryButton, SettingRow
+                        PrimaryButton, SettingRow, initialen
     backup.jsx        — keyBelongsToUser, collectUserData, buildExport,
                         buildExportFilename, downloadJson, exportUserData
     image.jsx         — prepareMealPhoto (foto → 1024px JPEG + 160px thumbnail)
@@ -54,8 +54,10 @@ js/
     icons.jsx         — icons{} map + Icon({name,size,className}) component
   modules/
     auth/
-      index.jsx       — DEFAULT_USERS, loadUsers/saveUsers, loadSession/saveSession,
-                        AdminPanel, ChangePwScreen, AccessGate
+      index.jsx       — DEFAULT_USERS, loadUsers/saveUsers, loadSession/saveSession/
+                        refreshSession, biometrie (bioMogelijk/bioInschrijven/
+                        bioAanmelden), LoginShell, VeldKaart, Schakelaar,
+                        ScanOverlay, AdminPanel, ChangePwScreen, AccessGate
     onboarding/
       index.jsx       — SetupWizard (profiel invullen, macro's berekenen)
     dashboard/
@@ -189,12 +191,28 @@ Let op: gebruik **niet** `#f97316` voor tekst op de lichte achtergrond — daar 
 - Standaardwachtwoord: `Qvolve123!`. Verplichte wijziging bij eerste login
   (min. 8 tekens, niet gelijk aan standaard).
 - Admin-paneel via "Beheer" onderaan login. Admin-wachtwoord: `QvolveAdmin!`.
-  Toevoegen/verwijderen/resetten van gebruikers.
+  Toevoegen/verwijderen/resetten van gebruikers. Een reset of verwijdering wist
+  ook de biometrische sleutel van die persoon op dit toestel.
+- **Onthoud mij op dit toestel** staat standaard aan: de sessie blijft dan staan
+  tot je zelf uitlogt. Uit → het oude gedrag, drie dagen sliding window. Een
+  sessie van vóór deze schakelaar mist het veld en valt dus terug op drie dagen.
+- **Biometrie (WebAuthn).** Na een geslaagde login biedt de app aan om voortaan
+  met Face ID, Touch ID, een vingerafdruk of Windows Hello te openen. Het toestel
+  maakt en bewaart de sleutel zelf; wij houden alleen het id ervan bij, zodat we
+  hem kunnen opvragen. Er is geen server die de handtekening controleert — dit is
+  een slot op dit toestel, even sterk als het wachtwoord dat vandaag ook al
+  gewoon in `localStorage` staat, niet meer. Vereist een beveiligde context
+  (https of localhost); waar dat niet kan, blijft alleen het wachtwoord over.
 
 ### localStorage-keys
 
 - `qvolve-users-v2` — gebruikerslijst
-- `qvolve-session` — actieve login (naam + tijdstip, 3-dagen sliding window)
+- `qvolve-session` — actieve login, `{ name, ts, remember }`. Zonder `remember`
+  verloopt ze na drie dagen (sliding window); met `remember` pas bij uitloggen
+- `qvolve-bio` — `{ name, credId, ts }`: welke gebruiker op dit toestel een
+  biometrische sleutel heeft, en het id waarmee we die opvragen
+- `qvolve-bio-skip` — namen die "Nu niet" antwoordden op de vraag om biometrie
+  in te stellen; we vragen het hun niet opnieuw
 - `profile:{slug}` — profielgegevens
 - `macros:{slug}` — berekende macro's
 - `daily-log:{slug}:{datum}` — voedingslogboek per dag
@@ -212,8 +230,10 @@ Let op: gebruik **niet** `#f97316` voor tekst op de lichte achtergrond — daar 
 Alle sleutels hebben de vorm `<soort>:<slug>[:<extra>]`. De export in
 `js/lib/backup.jsx` gebruikt precies die vorm om te bepalen wat van wie is;
 een nieuwe sleutel die dat patroon volgt, gaat automatisch mee in de back-up.
-`qvolve-users-v2` en `qvolve-session` volgen het patroon bewust niet en blijven
-buiten de export.
+`qvolve-users-v2`, `qvolve-session`, `qvolve-bio` en `qvolve-bio-skip` volgen het
+patroon bewust niet en blijven buiten de export: ze horen bij dít toestel, niet
+bij de gegevens van de gebruiker. Een biometrische sleutel kán ook niet mee — hij
+verlaat het toestel nooit.
 
 ## Navigatie
 
@@ -316,8 +336,15 @@ ProfilePanel: avatar met initialen, navy doelkaart (doel, kcal, eiwit, tekort in
 verwijdert je eigen producten. Daaronder de DataExportCard.
 
 ### auth (`js/modules/auth/index.jsx`)
-Login (naam + wachtwoord), sessiebeheer (3 dagen sliding window), wachtwoord
-verplicht wijzigen bij eerste login, admin-paneel voor gebruikersbeheer.
+Loginscherm uit het ontwerp: donkere kop met logo, wordmark en tagline, daaronder
+een licht vel (`LoginShell`) dat overloopt in de app. Twee toestanden — nog geen
+sleutel op dit toestel (naam, wachtwoord, "onthoud mij", Start), of wel een
+sleutel (avatartegel met initialen, "Aanmelden met Face ID", terugvalknop naar
+het wachtwoord, "Niet jij? Ander account"). Verder: sessiebeheer, verplicht
+wachtwoord kiezen bij de eerste login, en het admin-paneel als bottom sheet.
+`ScanOverlay` toont het scanvenster zolang het toestel om je gezicht of vinger
+vraagt. "Wachtwoord vergeten" klapt een uitleg open in plaats van een e-mail te
+sturen: er is geen server, een reset gebeurt via Beheer.
 
 ### onboarding (`js/modules/onboarding/index.jsx`)
 SetupWizard: gewicht/lengte/leeftijd/geslacht/activiteit/doel/macroprofiel
@@ -330,7 +357,7 @@ SetupWizard: gewicht/lengte/leeftijd/geslacht/activiteit/doel/macroprofiel
   geeft alles als JSON-bestand mee; loopt het browserquotum vol, dan verschijnt
   bovenaan een waarschuwing in plaats van een stille blokkade.
 - Service worker kan oude versies cachen; daarom network-first voor HTML/JS.
-  Bump `CACHE` in `sw.js` bij grote wijzigingen (nu `qvolve-v9`).
+  Bump `CACHE` in `sw.js` bij grote wijzigingen (nu `qvolve-v10`).
 - De coachvoorstellen komen uit het weekschema en je loggeschiedenis. Een nieuwe
   gebruiker zonder schema krijgt daarom alleen de zoekknop te zien — dat is
   bedoeld, niet stuk.

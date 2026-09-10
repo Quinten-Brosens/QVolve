@@ -22,6 +22,11 @@ const QV = {
   carb:      '#6f8fd0', // koolhydraten
 };
 
+// Initialen voor de avatartegel — "Quinten Brosens" wordt "QB".
+function initialen(naam) {
+  return String(naam || '').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('') || '?';
+}
+
 // Het terugkerende kopje uit het ontwerp: klein, monospace, gesperd, hoofdletters.
 function Eyebrow({ children, color, className = '' }) {
   return (

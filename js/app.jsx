@@ -32,15 +32,16 @@ function App() {
 
   function openAddOverlay(meal) { setAddOverlayMeal(meal || MEAL_TIMES[0].key); setShowAddOverlay(true); }
 
-  // Bij opstarten: vraag persistente opslag aan en ververs de sessie (sliding window van 3 dagen).
+  // Bij opstarten: vraag persistente opslag aan en ververs de sessie.
   useEffect(() => {
     requestPersistentStorage();
-    if (userName) saveSession(userName);
+    if (userName) refreshSession();
     return () => clearTimeout(toastTimer.current);
   }, []);
 
   // Inloggen / uitloggen — houdt de sessie in localStorage in sync.
-  function handleUnlock(name) { saveSession(name); setUserName(name); }
+  // onthoud = de keuze uit het loginscherm: sessie tot je uitlogt, of drie dagen.
+  function handleUnlock(name, onthoud) { saveSession(name, onthoud); setUserName(name); }
   function handleLogout() { clearSession(); setUserName(null); }
 
   // Profiel laden
