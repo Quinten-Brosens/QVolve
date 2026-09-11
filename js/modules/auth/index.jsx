@@ -12,6 +12,7 @@ const DEFAULT_USERS = [
   { name: "Anthony Van Goethem", password: DEFAULT_PASSWORD, mustChangePw: true },
   { name: "Quinten Brosens",     password: DEFAULT_PASSWORD, mustChangePw: true },
   { name: "Hanne Nelen",         password: DEFAULT_PASSWORD, mustChangePw: true },
+  { name: "Jasha Bosmans",       password: DEFAULT_PASSWORD, mustChangePw: true },
 ];
 
 function loadUsers() {

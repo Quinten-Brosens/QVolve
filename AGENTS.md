@@ -186,7 +186,7 @@ Let op: gebruik **niet** `#f97316` voor tekst op de lichte achtergrond — daar 
 
 - Geen centrale database. Alles in `localStorage`, per apparaat.
 - Standaardgebruikers (in `DEFAULT_USERS` in `js/modules/auth/index.jsx`):
-  Alvin Broers, Anthony Van Goethem, Quinten Brosens, Hanne Nelen.
+  Alvin Broers, Anthony Van Goethem, Quinten Brosens, Hanne Nelen, Jasha Bosmans.
 - `loadUsers()` voegt nieuwe namen uit `DEFAULT_USERS` automatisch toe aan een
   bestaande lokale lijst — zo verschijnen nieuwe gebruikers ook op toestellen die
   de app al kenden.
